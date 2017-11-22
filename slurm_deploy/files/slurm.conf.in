@@ -1,0 +1,55 @@
+#
+# Copyright (C) 2016-2017 Mellanox Technologies, Inc.
+#                         All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
+# Basic Slurm configuration file.
+# Customizations should be provided in /etc/slurm/local.conf
+
+AuthType=auth/munge
+CacheGroups=0
+CryptoType=crypto/munge
+DisableRootJobs=YES 
+JobRequeue=1
+KillOnBadExit=1
+MpiDefault=none
+ProctrackType=proctrack/pgid
+ReturnToService=0
+SlurmctldPidFile=@SLURM_INST@/var/slurmctld.pid
+SlurmctldPort=1808
+SlurmdPidFile=@SLURM_INST@/var/slurmd.pid
+SlurmdPort=1809
+SlurmdSpoolDir=@SLURM_INST@/var/
+SlurmUser=@SLURM_USER@
+SlurmdUser=@SLURM_USER@
+StateSaveLocation=@SLURM_INST@/tmp/
+SwitchType=switch/none
+TaskPlugin=task/none
+TaskPluginParam=
+TreeWidth=25
+UsePAM=0
+CompleteWait=0
+InactiveLimit=0
+KillWait=10
+MinJobAge=300
+SlurmctldTimeout=120
+Waittime=10
+FastSchedule=1
+SchedulerType=sched/backfill
+SchedulerPort=7321
+SelectType=select/linear
+
+SlurmctldDebug=4
+SlurmctldLogFile=@SLURM_INST@/var/slurmctld.log
+SlurmdDebug=3
+SlurmdLogFile=@SLURM_INST@/var/slurmd.log
+
+JobAcctGatherFrequency=30
+JobAcctGatherType=jobacct_gather/none
+
+Include @SLURM_INST@/etc/local.conf
