@@ -10,7 +10,7 @@
 
 #!/bin/bash
 
-. ./settings.env
+#. ./settings.env
 
 FILES=`pwd`/files
 
@@ -23,7 +23,8 @@ function echo_error()
 
 function sanity_check()
 {
-    tmp=`echo $SLURM_INST | grep ^"/tmp/"`
+#    tmp=`echo $SLURM_INST | grep ^"/tmp/"`
+    tmp=`echo $SLURM_INST`
     local sanity_error=""
     if  [ -z "$tmp" ]; then
         sanity_error=1
@@ -36,7 +37,7 @@ function escape_path()
     echo $1 | sed -e 's/\//\\\//g'
 }
 
-function prepare_conf()
+function slurm_prepare_conf()
 {
     if [ -n "`sanity_check`" ]; then
         echo_error $LINENO "Error sanity check"
@@ -67,18 +68,18 @@ function prepare_conf()
         sed -e "s/@SLURM_USER@/$SLURM_USER/g" > $SLURM_INST/etc/slurm.conf
 }
 
-function finalize_install()
+function slurm_finalize_install()
 {
     if [ -n "`sanity_check`" ]; then
         echo_error $LINENO "Error sanity check"
         exit 1
     fi
-    prepare_conf
+    #slurm_prepare_conf
     mkdir -p $SLURM_INST/var
     mkdir -p $SLURM_INST/tmp
 }
 
-function build_slurm_all(){
+function slurm_build_all(){
     if [ -n "`sanity_check`" ]; then
         echo_error $LINENO "Error sanity check"
         exit 1
@@ -105,7 +106,47 @@ function build_slurm_all(){
     cd $sdir
 }
 
-function build_slurm_plugin()
+function slurm_build_remove() {
+    if [ -n "`sanity_check`" ]; then
+        echo_error $LINENO "Error sanity check"
+        exit 1
+    fi
+    if [ -d "$SLURM_SRC/.build_tmp" ]; then
+        rm -rf $SLURM_SRC/.build_tmp
+    fi
+}
+
+function slurm_build_update() {
+    if [ -n "`sanity_check`" ]; then
+        echo_error $LINENO "Error sanity check"
+        exit 1
+    fi
+    if [ -d "$SLURM_SRC/.build_tmp" ]; then
+        sdir=`pwd`
+        cd $SLURM_SRC/.build_tmp
+        make -j20 clean
+        make -j20
+        make -j20 install
+        cd $sdir
+    fi
+}
+
+function slurm_build_update_light() {
+    if [ -n "`sanity_check`" ]; then
+        echo_error $LINENO "Error sanity check"
+        exit 1
+    fi
+    if [ -d "$SLURM_SRC/.build_tmp" ]; then
+        sdir=`pwd`
+        cd $SLURM_SRC/.build_tmp
+        make -j20
+        make -j20 install
+        cd $sdir
+    fi
+}
+
+
+function slurm_build_plugin()
 {
     local sdir=`pwd`
     local tdir=./.build_tmp-$1
@@ -121,13 +162,13 @@ function build_slurm_plugin()
     cd $sdir
 }
 
-function build_slurm()
+function slurm_build()
 {
-    build_slurm_all
+    slurm_build_all
     for i in `seq 2 10`; do
         eval var=\$PMIX_INST_$i
         if [ -n "$var" ]; then
-            build_slurm_plugin $i
+            slurm_build_plugin $i
         fi
     done
 }
@@ -182,7 +223,7 @@ function copy_remote()
     copy_remote_nodes $nodes $1 $2
 }
 
-function stop_slurm_instances()
+function slurm_stop_instances()
 {
     if [ -n "`sanity_check`" ]; then
         echo_error $LINENO "Error sanity check"
@@ -191,14 +232,14 @@ function stop_slurm_instances()
     exec_remote_as_user "$FILES/slurm_kill.sh $SLURM_INST"
 }
 
-function cleanup_slurm_installation_nodes()
+function slurm_cleanup_installation_nodes()
 {
     if [ -n "`sanity_check`" ]; then
         echo_error $LINENO "Error sanity check"
         exit 1
     fi
     # stop all running processes
-    stop_slurm_instances
+    slurm_stop_instances
 
     # get back the rights on the files
     if [ `whoami` != "$SLURM_USER" ]; then
@@ -209,14 +250,14 @@ function cleanup_slurm_installation_nodes()
     exec_remote_nodes $1 rm -Rf --preserve-root $SLURM_INST
 }
 
-function cleanup_slurm_installation()
+function slurm_cleanup_installation()
 {
     if [ -n "`sanity_check`" ]; then
         echo_error $LINENO "Error sanity check"
         exit 1
     fi
     nodes=`get_node_list`
-    cleanup_slurm_installation_nodes $nodes
+    slurm_cleanup_installation_nodes $nodes
 }
 
 function node_is_head()
@@ -233,7 +274,7 @@ function get_node_list_wo_head()
     echo $nodes_wo_head
 }
 
-function distribute_slurm()
+function slurm_distribute()
 {
     if [ -n "`sanity_check`" ]; then
         echo_error $LINENO "Error sanity check"
@@ -245,10 +286,10 @@ function distribute_slurm()
     if [ ! -z $head_node ]; then
         nodes=`get_node_list_wo_head`
         # Cleanup previous installations
-        cleanup_slurm_installation_nodes $nodes $SLURM_INST
+        slurm_cleanup_installation_nodes $nodes $SLURM_INST
     else
         # Cleanup previous installations
-        cleanup_slurm_installation $SLURM_INST
+        slurm_cleanup_installation $SLURM_INST
     fi
 
     # Prepare the FS
@@ -271,7 +312,7 @@ function distribute_slurm()
     fi
 }
 
-function launch_slurm()
+function slurm_launch()
 {
     if [ -n "`sanity_check`" ]; then
         echo_error $LINENO "Error sanity check"
