@@ -10,7 +10,7 @@
 
 #!/bin/bash
 
-#. ./settings.env
+. ./settings.env
 
 FILES=`pwd`/files
 
@@ -200,15 +200,22 @@ function exec_remote()
     exec_remote_nodes $1
 }
 
-function exec_remote_as_user()
+function exec_remote_as_user_nodes()
 {
-    nodes=`get_node_list`
+    nodes=$1
+    shift
     pdsh_bin=`which pdsh`
     if [ `whoami` != "$SLURM_USER" ]; then
         sudo su - $SLURM_USER -c "$pdsh_bin -w $nodes $@"
     else
         $pdsh_bin -w $nodes $@
     fi
+}
+
+function exec_remote_as_user()
+{
+    nodes=`get_node_list`
+    exec_remote_as_user_nodes $nodes $@
 }
 
 function copy_remote_nodes()
@@ -318,6 +325,7 @@ function slurm_launch()
         echo_error $LINENO "Error sanity check"
         exit 1
     fi
+    nodes=`get_node_list`
     # launch as SLURM USER
-    exec_remote_as_user "$FILES/slurm_launch.sh $SLURM_INST"
+    exec_remote_as_user_nodes $nodes "$FILES/slurm_launch.sh $SLURM_INST"
 }

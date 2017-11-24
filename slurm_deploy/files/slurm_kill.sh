@@ -16,7 +16,7 @@ function kill_binary()
 {
     name=$1
     if [ ! -f "$SLURM_INST/var/$name.pid" ]; then
-        exit 0
+        return 0
     fi
     pid=`cat $SLURM_INST/var/$name.pid`
     need_kill=`ps ax | grep "$pid" | grep $name`

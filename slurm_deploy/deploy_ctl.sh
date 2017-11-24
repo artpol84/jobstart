@@ -46,7 +46,7 @@ function check_error() {
 
 function item_download() {
     giturl=$1
-    prefix=$2
+    REPO_INST=$2
     branch=$3
     commit=$4
     config=$5
@@ -55,9 +55,6 @@ function item_download() {
 
     if [ -z "$giturl" ]; then
         echo_error $LINENO "github url was not set"
-    fi
-    if [ -z "$prefix" ]; then
-        echo_error $LINENO "download destination dir was not set"
     fi
     if [ ! -d "$SRC_DIR" ]; then
         mkdir -p $SRC_DIR
@@ -89,22 +86,25 @@ function item_download() {
 
     REPO_NAME=$repo_name
     REPO_SRC=$SRC_DIR/$repo_name
-    REPO_INST=$INSTALL_DIR/$repo_name
- 
+    if [ -z "$REPO_INST" ]; then
+        REPO_INST=$INSTALL_DIR/$repo_name
+    fi
     cd $REPO_SRC
     if [ -n "$commit" ]; then
         git reset --hard $commit
     fi
     build=$REPO_SRC/.build
-    rm -rf .build
-    create_dir $build
-    cd $build
-    
+    #rm -rf .build
+    if [ ! -d ".build" ]; then
+        create_dir .build
+    fi
+    #cd $build
+
 # create the configure script for we can configure it later
     cat > $build/config.sh << EOF
 #!/bin/bash
 
-$REPO_SRC/configure --prefix=$REPO_SRC $config
+$REPO_SRC/configure --prefix=$REPO_INST $config
 EOF
     chmod +x $build/config.sh
     cd $sdir
@@ -114,36 +114,35 @@ function deploy_source_prepare() {
     #             github url                                 prefix         branch      commit      config
     item_download "https://github.com/open-mpi/hwloc.git"    "$HWLOC_INST"  ""          "e6559c7"   ""
         HWLOC_INST=$REPO_INST
-        echo $REPO_NAME > .deploy_repo.lst
+        echo "$REPO_NAME $REPO_INST"> $DEPLOY_DIR/.deploy_repo.lst
 
     item_download "https://github.com/libevent/libevent.git" "$LIBEV_INST"  ""          "e7ff4ef"   ""
         LIBEV_INST=$REPO_INST
-        echo $REPO_NAME >> .deploy_repo.lst        
+        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
 
     item_download "https://github.com/pmix/pmix.git"         "$PMIX_INST"   "v2.0"      ""          "--with-libevent=$LIBEV_INST"
         PMIX_INST=$REPO_INST
-        echo $REPO_NAME >> .deploy_repo.lst        
+        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
 
     item_download "https://github.com/openucx/ucx.git"       "$UCX_INST"    ""          ""          ""
         UCX_INST=$REPO_INST
-        echo $REPO_NAME >> .deploy_repo.lst        
+        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
 
-    item_download "$SLURM_URL"                               "SLURM_INST"   ""          ""          "--with-ucx=$UCX_INST \
+    item_download "$SLURM_URL"                               "$SLURM_INST"   ""          ""          "--with-ucx=$UCX_INST \
         --with-pmix=$PMIX_INST --with-hwloc=$HWLOC_INST --with-munge=/usr/"
         SLURM_INST=$REPO_INST
         SLURM_SRC=$REPO_SRC
-        echo $REPO_NAME >> .deploy_repo.lst        
+        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
 
     item_download "https://github.com/open-mpi/ompi.git"     "$OMPI_INST"   "v3.1.x"    ""          "--enable-debug \
         --enable-mpirun-prefix-by-default --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-pmi=$SLURM_INST \
         --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST $OMPI_EXTRA_CONFIG"
-        echo $REPO_NAME >> .deploy_repo.lst        
+        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
 
     # slurm deploy env prepare
     user=`whoami`
     cat settings.env.in | \
         sed -e "s|\@slurm_src\@|$SLURM_SRC|g" | \
-        sed -e "s|\@slurm_nodelist\@|$NODELIST|g" | \
         sed -e "s|\@pmix_install\@|$PMIX_INST|g" | \
         sed -e "s|\@hwloc_install\@|$HWLOC_INST|g" | \
         sed -e "s|\@slurm_install\@|$SLURM_INST|g" | \
@@ -155,94 +154,70 @@ function deploy_source_prepare() {
 
 }
 
+function get_item() {
+    item_inst=$1
+    item=`cat $DEPLOY_DIR/.deploy_repo.lst | grep $item_inst | awk '{print $1}'`
+    echo $item
+}
+
+function get_repo_item_lst() {
+    repo_items=`cat $DEPLOY_DIR/.deploy_repo.lst | awk '{print $2}'`
+    echo $repo_items
+}
+
+function deploy_build_item() {
+    item_inst=$1
+	item=`get_item $item_inst`
+    light=$2
+
+    sdir=`pwd`
+    cd $SRC_DIR/$item
+    echo Starting \"$item\" build
+    if [ ! -f "configure" ]; then
+        if [ -f "autogen.sh" ]; then
+            ./autogen.sh || (echo_error $LINENO "$item autogen error" && exit 1)
+        else
+            ./autogen.pl || (echo_error $LINENO "$item autogen error" && exit 1)
+        fi
+    fi
+    cd .build || (echo_error $LINENO "directory change error" && exit 1)
+    if [ ! -f "config.log" ]; then
+        ./config.sh || (echo_error $LINENO "$item configure error" && exit 1)
+    fi
+    make -j $CPU_NUM install || (echo_error $LINENO "$item make error" && exit 1)
+    cd $sdir
+}
+
 function deploy_build_all() {
     sdir=`pwd`
 
-    if [ ! -f ".deploy_repo.lst" ]; then
+    if [ ! -f "$DEPLOY_DIR/.deploy_repo.lst" ]; then
         echo "Source code does not ready, please try prepare it by cmd:"
         echo ./`basename "$0"` " source_prepare"
         exit 1
     fi
-    repo_list=`cat .deploy_repo.lst`
+    repo_list=`get_repo_item_lst`
     if [ -z "$repo_list" ]; then
         echo "Something went wrong. Can not continue."
         exit 1
     fi
 
     cd $SRC_DIR
-    for item in $repo_list; do
+    for item_inst in $repo_list; do
+		item=`get_item $item_inst`
         if [ -f $item/.build/config.sh ]; then
-            tdir=`pwd`
-            cd $item
-            echo Starting \"$item\" build
-            if [ ! -f "configure" ]; then
-                if [ -f "autogen.sh" ]; then
-                    ./autogen.sh || (echo_error $LINENO "$item autogen error" && exit 1)
-                else
-                    ./autogen.pl || (echo_error $LINENO "$item autogen error" && exit 1)
-                fi
-            fi
-            cd .build || (echo_error $LINENO "directory change error" && exit 1)
-            ./config.sh || (echo_error $LINENO "$item configure error" && exit 1)
-            make -j $CPU_NUM install || (echo_error $LINENO "$item make error" && exit 1)
-            cd $tdir
+            deploy_build_item $item_inst
         fi
     done
 
-    cd $sdir
-}
-
-function deplou_build_clean() {
-    //TODO
-}
-
-function init_deploy() {
-    if [ -d $DEPLOY_DIR ]; then
-        echo "#" The deploy directory \"$DEPLOY_DIR\" is already exists 
-        echo "#" Please remove this directory or set another deploy path in \"deploy_ctl.conf\"
-        echo "#" Can not continue
-        exit 1
-    fi
-    create_dir $DEPLOY_DIR
-    create_dir $SRC_DIR
-    create_dir $BUILD_DIR
-    create_dir $INSTALL_DIR
-}
-
-function deploy_build_all_old() {
-    local sdir=`pwd`
-    init_deploy
-    
-    # build_item use:
-    #   [1:git_url] [2:prefix] [3:branch] [4:commit] [5:config]
-    
-    # release-2.1.8-stable e7ff4ef on Jan 26
-    build_item "https://github.com/libevent/libevent.git" "$LIBEV_INST" "" "e7ff4ef" ""
-    # hwloc-1.11.8 e6559c7 on Sep 6
-    build_item "https://github.com/open-mpi/hwloc.git" "$HWLOC_INST" "" "e6559c7" ""
-    # PMIx
-    build_item "https://github.com/pmix/pmix.git" "$PMIX_INST" "v2.0" "" "--with-libevent=$LIBEV_INST"
-    # UCX master
-    build_item "https://github.com/openucx/ucx.git" "$UCX_INST" "" "" ""
-    
-    if [ -z "$SLURM_URL" ]; then
-        echo_error $LINENO ""
-        exit 1
-    fi
-
-    git clone $SLURM_URL $SLURM_SRC
-    cd $SLURM_SRC
-    if [ -n "$SLURM_COMMIT" ]; then
-        git checkout $SLURM_COMMIT
-    fi
-    slurm_build
     slurm_finalize_install
 
-    # OMPI v3.1.x
-    build_item "https://github.com/open-mpi/ompi.git" "$OMPI_INST" "v3.1.x" "" \
-        "--enable-debug --enable-mpirun-prefix-by-default --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-pmi=$SLURM_INST --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST $OMPI_EXTRA_CONFIG"
-
     cd $sdir
+}
+
+function deploy_build_clean() {
+#    //TODO
+    echo deploy_build_clean
 }
 
 function deploy_slurm_update_ligth() {
@@ -253,18 +228,39 @@ function deploy_slurm_update_ligth() {
     cd $sdir
 }
 
+function deploy_slurm_pmix_update() {
+    sdir=`pwd`
+    nodes=`distribute_get_nodes`
+    item=`get_item $SLURM_INST`
+    cd $SRC_DIR/$item/.build/src/plugins/mpi/pmix
+    make -j $CPU_NUM clean
+    make -j $CPU_NUM install
+    for file in `ls $SLURM_INST/lib/slurm/mpi_pmix*`; do
+        copy_remote_nodes $nodes $file $SLURM_INST/lib/slurm/
+    done
+    cd $sdir
+
+}
+
 function deploy_slurm_update() {
     sdir=`pwd`
-    slurm_build_remove
-    slurm_build
-    slurm_finalize_install
-    slurm_distribute
+    light=$1
+    nodes=`distribute_get_nodes`
+    deploy_cleanup_item $SLURM_INST
+    if [ "$light" == "light" ]; then
+        item=`get_item $SLURM_INST`
+        cd $SRC_DIR/$item
+        make -j $CPU_NUM distclean
+        ./config.sh
+    fi
+    deploy_build_item $SLURM_INST
+    deploy_distribute_item $SLURM_INST
     cd $sdir
 }
 
 function deploy_slurm_config() {
     slurm_conf=$1
-    
+
     if [ -n "$slurm_conf" ]; then
         if [ -f $slurm_conf ]; then
             echo_error $LINENO "Can not set Slurm config file: file does not exist"
@@ -275,6 +271,8 @@ function deploy_slurm_config() {
     else
         slurm_prepare_conf
     fi
+    nodes=`distribute_get_nodes`
+    copy_remote_nodes $nodes $SLURM_INST/etc $SLURM_INST
 }
 
 function distribute_get_nodes()
@@ -292,13 +290,46 @@ function distribute_get_nodes()
     echo $nodes
 }
 
-function deploy_distribute_all() {
-    slurm_distribute
+function deploy_distribute_item() {
+    item_inst=$1
+    nodes=`distribute_get_nodes`
+    echo -ne "$nodes: copying $item_inst... "    
+    pdir="$(dirname "$item_inst")"
+    exec_remote_nodes $nodes mkdir -p $pdir
+    copy_remote_nodes $nodes $item_inst $pdir
+    echo "OK"
+}
 
-#    nodes=`distribute_get_nodes`
-#    copy_remote_nodes $nodes $OMPI_INST/* $OMPI_INST
-#    copy_remote_nodes $nodes $PMIX_INST/* $PMIX_INST
-#    copy_remote_nodes $nodes $HWLOC_INST/* $HWLOC_INST
-#    copy_remote_nodes $nodes $LIBEV_INST/* $LIBEV_INST
-#    copy_remote_nodes $nodes $UCX_INST/* $UCX_INST    
+function deploy_distribute_all() {
+    items_list=`get_repo_item_lst`
+    for item_inst in $items_list; do
+        deploy_distribute_item $item_inst
+    done
+}
+
+function deploy_cleanup_item() {
+    item_inst=$1
+    nodes=`distribute_get_nodes`
+    echo -ne "$nodes: removing '$item_inst'... "
+    exec_remote_nodes $nodes rm -rf $item_inst
+    echo "OK"
+}
+
+function deploy_cleanup_all {
+    items_list=`get_repo_item_lst`
+    for item_inst in $items_list; do
+        deploy_cleanup_item $item_inst
+    done
+}
+
+function deploy_slurm_start() {
+    slurm_launch
+    slurm_ctl_node=`cat $SLURM_INST/etc/local.conf | grep ControlMachine | cut -f2 -d"="`
+    exec_remote_as_user_nodes $slurm_ctl_node $SLURM_INST/sbin/slurmctld
+}
+
+function deploy_slurm_stop() {
+    slurm_stop_instances
+    slurm_ctl_node=`cat $SLURM_INST/etc/local.conf | grep ControlMachine | cut -f2 -d"="`
+    exec_remote_as_user_nodes $slurm_ctl_node "$FILES/slurm_kill.sh $SLURM_INST"
 }

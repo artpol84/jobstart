@@ -19,10 +19,13 @@ function print_help() {
     echo ./`basename "$0"` "<cmd>"
     echo "      build_all                           build all projects"
     echo "      slurm_config                        "
-    echo "      distribute_all [not tested]"
+    echo "      distribute_all"
+    echo "      cleanup_all"
     echo "      slurm_update <light>"
-    echo "      plugin_update [not implemented]"
+    echo "      plugin_update"
     echo "      source_prepare                      download software, prepare configs"
+    echo "      slurm_start"
+    echo "      slurm_stop" 
 }
 
 case $cmd in
@@ -38,18 +41,22 @@ case $cmd in
         deploy_distribute_all
         ;;
     slurm_update)
-        ligth=$1
-        shift
-        if [ "$light" = "ligth" ]; then
-            deploy_slurm_update_ligth
-        else
-            deploy_slurm_update
-        fi
+        deploy_slurm_update $1
         ;;
     plugin_update)
+        deploy_slurm_pmix_update
         ;;
     source_prepare)
         deploy_source_prepare
+        ;;
+    cleanup_all)
+        deploy_cleanup_all
+        ;;
+    slurm_stop)
+        deploy_slurm_stop
+        ;;
+    slurm_start)
+        deploy_slurm_start
         ;;
     *)
         print_help
