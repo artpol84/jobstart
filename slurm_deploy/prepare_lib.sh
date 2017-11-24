@@ -18,7 +18,7 @@ function echo_error()
 {
     lno=$1
     fl=`basename $0`
-    echo "$fl:$lno:$2"
+    echo "$fl:$lno: $2"
 }
 
 function sanity_check()

@@ -17,12 +17,12 @@ shift
 function print_help() {
     echo "Use:"
     echo ./`basename "$0"` "<cmd>"
-    echo "      build_all"
-    echo "      slurm_config"
+    echo "      build_all                           build all projects"
+    echo "      slurm_config                        "
     echo "      distribute_all [not tested]"
     echo "      slurm_update <light>"
     echo "      plugin_update [not implemented]"
-    echo "      download_all [not implemented]"
+    echo "      source_prepare                      download software, prepare configs"
 }
 
 case $cmd in
@@ -48,7 +48,8 @@ case $cmd in
         ;;
     plugin_update)
         ;;
-    download_all)
+    source_prepare)
+        deploy_source_prepare
         ;;
     *)
         print_help
