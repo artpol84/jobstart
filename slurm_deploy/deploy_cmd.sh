@@ -9,7 +9,12 @@
 #
 #!/bin/bash -x
 
+. ./deploy_ctl.conf
 . ./deploy_ctl.sh
+
+if [ -f $DEPLOY_DIR/.deploy_env ]; then
+    . $DEPLOY_DIR/.deploy_env
+fi
 
 cmd=$1
 shift
@@ -18,7 +23,7 @@ function print_help() {
     echo "Use:"
     echo ./`basename "$0"` "<cmd>"
     echo "      build_all                           build all projects"
-    echo "      slurm_config                        "
+    echo "      slurm_config <config>               "
     echo "      distribute_all"
     echo "      cleanup_all"
     echo "      slurm_update <light>"
@@ -35,7 +40,7 @@ case $cmd in
     slurm_config)
         config=$1
         shift
-        deploy_slurm_config $config
+        slurm_prepare_conf $config
         ;;
     distribute_all)
         deploy_distribute_all

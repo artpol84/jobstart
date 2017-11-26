@@ -10,7 +10,11 @@
 
 #!/bin/bash
 
-. ./settings.env
+. ./deploy_ctl.conf
+
+if [ -f $DEPLOY_DIR/.deploy_env ]; then
+    . $DEPLOY_DIR/.deploy_env
+fi
 
 FILES=`pwd`/files
 
@@ -35,37 +39,6 @@ function sanity_check()
 function escape_path()
 {
     echo $1 | sed -e 's/\//\\\//g'
-}
-
-function slurm_prepare_conf()
-{
-    if [ -n "`sanity_check`" ]; then
-        echo_error $LINENO "Error sanity check"
-        exit 1
-    fi
-
-    mkdir -p $SLURM_INST/etc/
-    local tdir=./.conf_tmp
-
-    rm -fR $tdir
-    mkdir $tdir
-    # Remove unneeded portions
-    cat /etc/slurm/local.conf | grep -v "ControlMachine" | \
-        grep -v "BackupController" | \
-        grep -v "local_dbd" | \
-        grep -v "TopologyPlugin" | \
-        sed -e "s/AllocNodes=[a-z,0-9\-]*/AllocNodes=`hostname`/g" | \
-        sed -e "s/RealMemory=[0-9]* //g" >  $tdir/local.conf
-
-    echo >> $tdir/local.conf
-    echo "ControlMachine=`hostname`" >> $tdir/local.conf
-    cp $tdir/local.conf $SLURM_INST/etc/
-    rm -fR $tdir
-
-    SLURM_INST_ESC=`escape_path $SLURM_INST`
-    cat $FILES/slurm.conf.in | \
-        sed -e "s/@SLURM_INST@/$SLURM_INST_ESC/g" | \
-        sed -e "s/@SLURM_USER@/$SLURM_USER/g" > $SLURM_INST/etc/slurm.conf
 }
 
 function slurm_finalize_install()

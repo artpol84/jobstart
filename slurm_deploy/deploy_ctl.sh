@@ -13,6 +13,10 @@
 . ./deploy_ctl.conf
 . ./prepare_lib.sh
 
+if [ -f $DEPLOY_DIR/.deploy_env ]; then
+    . $DEPLOY_DIR/.deploy_env
+fi
+
 SLURM_SRC=$SRC_DIR/slurm # Where to find SLURM sources.
 CPU_NUM=`grep -c ^processor /proc/cpuinfo`
 
@@ -45,16 +49,18 @@ function check_error() {
 }
 
 function item_download() {
-    giturl=$1
-    REPO_INST=$2
-    branch=$3
-    commit=$4
-    config=$5
-    
+    repo_name=$1
+    packurl=$2
+    giturl=$3
+    REPO_INST=$4
+    branch=$5
+    commit=$6
+    config=$7
+
     sdir=`pwd`
 
-    if [ -z "$giturl" ]; then
-        echo_error $LINENO "github url was not set"
+    if [ -z "$giturl" ] && [ -z "$packurl" ]; then
+        echo_error $LINENO "source url was not set"
     fi
     if [ ! -d "$SRC_DIR" ]; then
         mkdir -p $SRC_DIR
@@ -65,25 +71,26 @@ function item_download() {
     fi
     cd $SRC_DIR
 
-    local tmp=$(mktemp)
-    if [ -n "$branch" ]; then
-        git clone --progress -b $branch $giturl 2>&1 | tee -a $tmp
+    echo "\"$repo_name\" repository downloading..."
+    if [ -d $SRC_DIR/$repo_name ]; then
+        echo_error $LINENO "\"$repo_name\" repository already exist, continue..."
     else
-        git clone --progress $giturl 2>&1 | tee -a $tmp
-    fi
-    if [ "0" -ne "${PIPESTATUS[0]}" ]; then
-        repo_name=$(awk -F\' '/fatal: destination path/ {print $2}' $tmp)    
-        existed=`cat $tmp | grep "destination path '$repo_name' already exists"`
-        if [ -z "$existed" ]; then
-            echo_error $LINENO "Can not clone '$repo_name' repo"
-            exit 1
+        if [ -n "$giturl" ]; then
+            if [ -n "$branch" ]; then
+                git clone --progress -b $branch $giturl 2>&1 | tee -a $tmp
+            else
+                git clone --progress $giturl 2>&1 | tee -a $tmp
+            fi
+        else
+            create_dir $SRC_DIR/$repo_name
+            curl -L $packurl | tar -xz -C $SRC_DIR/$repo_name --strip-components 1
+            if [ "0" -ne "${PIPESTATUS[0]}" ]; then
+                echo_error $LINENO "\"$repo_name\" repository can not be obtained"
+                rm -rf $SRC_DIR/$repo_name
+                exit 1
+            fi
         fi
-        echo_error $LINENO " \"$repo_name\" repository already exists, continue..."
-    else
-        repo_name=$(awk -F\' '/Cloning into/ {print $2}' $tmp)
     fi
-    rm $tmp
-
     REPO_NAME=$repo_name
     REPO_SRC=$SRC_DIR/$repo_name
     if [ -z "$REPO_INST" ]; then
@@ -112,46 +119,39 @@ EOF
 
 function deploy_source_prepare() {
     #             github url                                 prefix         branch      commit      config
-    item_download "https://github.com/open-mpi/hwloc.git"    "$HWLOC_INST"  ""          "e6559c7"   ""
+    item_download "hwloc" "$HWLOC_PACK" "$HWLOC_URL" "$HWLOC_INST" "$HWLOC_BRANCH" "$HWLOC_COMMIT" "$HWLOC_CONF"
         HWLOC_INST=$REPO_INST
         echo "$REPO_NAME $REPO_INST"> $DEPLOY_DIR/.deploy_repo.lst
+        echo "HWLOC_INST=$REPO_INST # $REPO_NAME"> $DEPLOY_DIR/.deploy_env
 
-    item_download "https://github.com/libevent/libevent.git" "$LIBEV_INST"  ""          "e7ff4ef"   ""
+    item_download "libevent" "$LIBEV_PACK" "$LIBEV_URL" "$LIBEV_INST" "$LIBEV_BRANCH" "$LIBEV_COMMIT" "$LIBEV_CONF"
         LIBEV_INST=$REPO_INST
         echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
+        echo "LIBENV_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
 
-    item_download "https://github.com/pmix/pmix.git"         "$PMIX_INST"   "v2.0"      ""          "--with-libevent=$LIBEV_INST"
+    item_download "pmix" "$PMIX_PACK" "$PMIX_URL" "$PMIX_INST" "$PMIX_BRANCH" "$PMIX_COMMIT" "$PMIX_CONF --with-libevent=$LIBEV_INST"
         PMIX_INST=$REPO_INST
         echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
+        echo "PMIX_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
 
-    item_download "https://github.com/openucx/ucx.git"       "$UCX_INST"    ""          ""          ""
+    item_download "ucx" "$UCX_PACK" "$UCX_URL" "$UCX_INST" "$UCX_BRANCH" "$UCX_COMMIT" "$UCX_CONF"
         UCX_INST=$REPO_INST
         echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
+        echo "UCX_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
 
-    item_download "$SLURM_URL"                               "$SLURM_INST"   ""          ""          "--with-ucx=$UCX_INST \
+    item_download "slurm" "$SLURM_PACK" "$SLURM_URL" "$SLURM_INST" "$SLURM_BRANCH" "$SLURM_COMMIT" "$SLURM_CONF --with-ucx=$UCX_INST \
         --with-pmix=$PMIX_INST --with-hwloc=$HWLOC_INST --with-munge=/usr/"
         SLURM_INST=$REPO_INST
         SLURM_SRC=$REPO_SRC
         echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
+        echo "SLURM_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
+        echo "SLURM_SRC=$REPO_SRC">> $DEPLOY_DIR/.deploy_env
 
-    item_download "https://github.com/open-mpi/ompi.git"     "$OMPI_INST"   "v3.1.x"    ""          "--enable-debug \
-        --enable-mpirun-prefix-by-default --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-pmi=$SLURM_INST \
-        --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST $OMPI_EXTRA_CONFIG"
+    item_download "ompi" "$OMPI_PACK" "$OMPI_URL" "$OMPI_INST" "$OMPI_BRANCH" "$OMPI_COMMIT" "$OMPI_CONF \
+        --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-pmi=$SLURM_INST \
+        --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST --with-hwloc=$HWLOC_INST"
         echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
-
-    # slurm deploy env prepare
-    user=`whoami`
-    cat settings.env.in | \
-        sed -e "s|\@slurm_src\@|$SLURM_SRC|g" | \
-        sed -e "s|\@pmix_install\@|$PMIX_INST|g" | \
-        sed -e "s|\@hwloc_install\@|$HWLOC_INST|g" | \
-        sed -e "s|\@slurm_install\@|$SLURM_INST|g" | \
-        sed -e "s|\@slurm_user\@|$user|g" > settings.env
-
-    if [ -n "$UCX_INST" ]; then
-        echo "UCX_INST=$UCX_INST" >> settings.env
-    fi
-
+        echo "OMPI_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
 }
 
 function get_item() {
@@ -204,7 +204,7 @@ function deploy_build_all() {
 
     cd $SRC_DIR
     for item_inst in $repo_list; do
-		item=`get_item $item_inst`
+        item=`get_item $item_inst`
         if [ -f $item/.build/config.sh ]; then
             deploy_build_item $item_inst
         fi
@@ -256,23 +256,6 @@ function deploy_slurm_update() {
     deploy_build_item $SLURM_INST
     deploy_distribute_item $SLURM_INST
     cd $sdir
-}
-
-function deploy_slurm_config() {
-    slurm_conf=$1
-
-    if [ -n "$slurm_conf" ]; then
-        if [ -f $slurm_conf ]; then
-            echo_error $LINENO "Can not set Slurm config file: file does not exist"
-            exit 1
-        fi
-        echo "Use config $slurm_conf"
-        cp -f $slurm_conf $SLURM_INST/etc/slurm.conf
-    else
-        slurm_prepare_conf
-    fi
-    nodes=`distribute_get_nodes`
-    copy_remote_nodes $nodes $SLURM_INST/etc $SLURM_INST
 }
 
 function distribute_get_nodes()
@@ -333,3 +316,50 @@ function deploy_slurm_stop() {
     slurm_ctl_node=`cat $SLURM_INST/etc/local.conf | grep ControlMachine | cut -f2 -d"="`
     exec_remote_as_user_nodes $slurm_ctl_node "$FILES/slurm_kill.sh $SLURM_INST"
 }
+
+function slurm_prepare_conf()
+{
+    if [ -n "`sanity_check`" ]; then
+        echo_error $LINENO "Error sanity check"
+        exit 1
+    fi
+
+    slurm_conf=$1
+
+    mkdir -p $SLURM_INST/etc/
+
+    if [ -n "$slurm_conf" ]; then
+        if [ ! -f $slurm_conf ]; then
+            echo_error $LINENO "Can not set Slurm config file: file does not exist"
+            exit 1
+        fi
+        echo "Use config $slurm_conf"
+        cp -f $slurm_conf $SLURM_INST/etc/local.conf
+    else
+        local tdir=./.conf_tmp
+
+        rm -fR $tdir
+        mkdir $tdir
+        # Remove unneeded portions
+        cat /etc/slurm/local.conf | grep -v "ControlMachine" | \
+            grep -v "BackupController" | \
+            grep -v "local_dbd" | \
+            grep -v "TopologyPlugin" | \
+            sed -e "s/AllocNodes=[a-z,0-9\-]*/AllocNodes=`hostname`/g" | \
+            sed -e "s/RealMemory=[0-9]* //g" >  $tdir/local.conf
+
+        echo >> $tdir/local.conf
+        echo "ControlMachine=`hostname`" >> $tdir/local.conf
+        cp $tdir/local.conf $SLURM_INST/etc/
+        rm -fR $tdir
+    fi
+
+    SLURM_INST_ESC=`escape_path $SLURM_INST`
+    cat $FILES/slurm.conf.in | \
+        sed -e "s/@SLURM_INST@/$SLURM_INST_ESC/g" | \
+        sed -e "s/@SLURM_USER@/$SLURM_USER/g" > $SLURM_INST/etc/slurm.conf
+
+    nodes=`distribute_get_nodes`
+    copy_remote_nodes $nodes $SLURM_INST/etc $SLURM_INST
+}
+
