@@ -23,7 +23,7 @@ B. Bild and start the installation
 ```Shell
 $ salloc -N <x> -t <y>
 ```
-2. Download all of the pakcages:
+2. Download all of the packages:
 ```Shell
 $ ./deploy_cmd.sh source_prepare
 ```
