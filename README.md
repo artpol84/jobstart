@@ -52,9 +52,9 @@ NOTE: From the other terminal!
 ```Shell
 $ export SLURMDEP_INST=<INSTALL_DIR from deploy_ctl.conf>
 $ cd $SLURMDEP_INST/slurm/bin
-```
 $ ./sinfo
 <check that the output is correct>
+```
 3. Allocate nodes inside the deployed Slurm installation:
 ```Shell
 $ ./salloc -N <X> <other options>
