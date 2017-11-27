@@ -98,7 +98,7 @@ function item_download() {
     fi
     cd $REPO_SRC
     if [ -n "$commit" ]; then
-        git reset --hard $commit
+        git checkout -b test $commit
     fi
     build=$REPO_SRC/.build
     #rm -rf .build
