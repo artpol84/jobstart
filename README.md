@@ -46,7 +46,7 @@ $ ./deploy_cmd.sh distribute_all
 
 C. Check the installation
 
-NOTE: From the other terminal!
+NOTE: From another terminal!
 
 1. Check that deploy is functional.
 ```Shell
