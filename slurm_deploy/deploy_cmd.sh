@@ -24,14 +24,16 @@ function print_help() {
     echo "Use:"
     echo ./`basename "$0"` "<cmd>"
     echo "      build_all                           build all projects"
-    echo "      slurm_config <config>               "
-    echo "      distribute_all"
-    echo "      cleanup_all"
+    echo "      slurm_config <config>               applyes the Slurm config to all nodes (requre to restart daemons)"
+    echo "      distribute_all                      propagates the installed directories to the all nodes"
+    echo "      cleanup_all                         cleans all install diretories, Slurm daemons will be stopped before cleaning"
     echo "      slurm_update <light>"
-    echo "      plugin_update"
+    echo "      plugin_update                       Slurm PMIx plugin rebuild and distribute to the all nodes"
     echo "      source_prepare                      download software, prepare configs"
-    echo "      slurm_start"
-    echo "      slurm_stop" 
+    echo "      slurm_start                         run Slurm daemons"
+    echo "      slurm_stop                          stop Slurm daemons" 
+    echo "      ompi_remove_files                   removes the list of file from OMPI install dir, should be try before distributing"
+    echo "                                          see the list of files to delete in the file: ompi_rm_files.txt"
 }
 
 case $cmd in
@@ -63,6 +65,9 @@ case $cmd in
         ;;
     slurm_start)
         deploy_slurm_start
+        ;;
+    ompi_remove_files)
+        deploy_ompi_remove_files "ompi_rm_files.txt"
         ;;
     *)
         print_help

@@ -13,6 +13,10 @@
 . ./deploy_ctl.conf
 . ./prepare_lib.sh
 
+if [ -z "$MUNGE_INST" ];then 
+    MUNGE_INST="/usr"
+fi
+
 if [ -f $DEPLOY_DIR/.deploy_env ]; then
     . $DEPLOY_DIR/.deploy_env
 fi
@@ -49,7 +53,7 @@ function check_error() {
 }
 
 function item_download() {
-    repo_name=$1
+    REPO_NAME=$1
     packurl=$2
     giturl=$3
     REPO_INST=$4
@@ -57,11 +61,19 @@ function item_download() {
     commit=$6
     config=$7
 
+    REPO_SRC=""
+    REPO_INST=""
+
     sdir=`pwd`
 
     if [ -z "$giturl" ] && [ -z "$packurl" ]; then
-        echo_error $LINENO "source url was not set"
+        echo_error $LINENO "source url for \"$REPO_NAME\" was not set, continue..."
+        return 0
     fi
+
+    REPO_SRC=$SRC_DIR/$REPO_NAME
+    REPO_INST=$INSTALL_DIR/$REPO_NAME
+
     if [ ! -d "$SRC_DIR" ]; then
         mkdir -p $SRC_DIR
         if [ ! -d $SRC_DIR ]; then
@@ -71,9 +83,9 @@ function item_download() {
     fi
     cd $SRC_DIR
 
-    echo "\"$repo_name\" repository downloading..."
-    if [ -d $SRC_DIR/$repo_name ]; then
-        echo_error $LINENO "\"$repo_name\" repository already exist, continue..."
+    echo "\"$REPO_NAME\" repository downloading..."
+    if [ -d $SRC_DIR/$REPO_NAME ]; then
+        echo_error $LINENO "\"$REPO_NAME\" repository already exist, continue..."
     else
         if [ -n "$giturl" ]; then
             if [ -n "$branch" ]; then
@@ -82,19 +94,14 @@ function item_download() {
                 git clone --progress $giturl 2>&1 | tee -a $tmp
             fi
         else
-            create_dir $SRC_DIR/$repo_name
-            curl -L $packurl | tar -xz -C $SRC_DIR/$repo_name --strip-components 1
+            create_dir $SRC_DIR/$REPO_NAME
+            curl -L $packurl | tar -xz -C $SRC_DIR/$REPO_NAME --strip-components 1
             if [ "0" -ne "${PIPESTATUS[0]}" ]; then
-                echo_error $LINENO "\"$repo_name\" repository can not be obtained"
-                rm -rf $SRC_DIR/$repo_name
+                echo_error $LINENO "\"$REPO_NAME\" repository can not be obtained"
+                rm -rf $SRC_DIR/$REPO_NAME
                 exit 1
             fi
         fi
-    fi
-    REPO_NAME=$repo_name
-    REPO_SRC=$SRC_DIR/$repo_name
-    if [ -z "$REPO_INST" ]; then
-        REPO_INST=$INSTALL_DIR/$repo_name
     fi
     cd $REPO_SRC
     if [ -n "$commit" ]; then
@@ -107,6 +114,9 @@ function item_download() {
     fi
     #cd $build
 
+    fix_config=`echo "$config " | sed -e 's/--with-[a-z]*= //g'`
+    config=$fix_config
+
 # create the configure script for we can configure it later
     cat > $build/config.sh << EOF
 #!/bin/bash
@@ -117,41 +127,52 @@ EOF
     cd $sdir
 }
 
+function deploy_item_reset_env() {
+    echo ""> $DEPLOY_DIR/.deploy_repo.lst
+    echo ""> $DEPLOY_DIR/.deploy_env
+}
+
+function deploy_item_save_env() {
+    repo_name=$1
+    repo_inst=$2
+    repo_src=$3
+    repo_env_prefix=$4
+
+    eval ${repo_env_prefix}_INST=$repo_inst
+    eval ${repo_env_prefix}_SRC=$repo_src
+   
+    if [ -n "$repo_inst" ]; then
+        echo "${repo_env_prefix}_INST=$repo_inst # $repo_name install">> $DEPLOY_DIR/.deploy_env
+        echo "$repo_name $repo_inst">> $DEPLOY_DIR/.deploy_repo.lst
+    fi
+    if [ -n "$repo_src" ]; then
+        echo "${repo_env_prefix}_SRC=$repo_src # $repo_name source"   >> $DEPLOY_DIR/.deploy_env
+    fi
+}
+
 function deploy_source_prepare() {
+    deploy_item_reset_env
     #             github url                                 prefix         branch      commit      config
     item_download "hwloc" "$HWLOC_PACK" "$HWLOC_URL" "$HWLOC_INST" "$HWLOC_BRANCH" "$HWLOC_COMMIT" "$HWLOC_CONF"
-        HWLOC_INST=$REPO_INST
-        echo "$REPO_NAME $REPO_INST"> $DEPLOY_DIR/.deploy_repo.lst
-        echo "HWLOC_INST=$REPO_INST # $REPO_NAME"> $DEPLOY_DIR/.deploy_env
+    deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "HWLOC"
 
     item_download "libevent" "$LIBEV_PACK" "$LIBEV_URL" "$LIBEV_INST" "$LIBEV_BRANCH" "$LIBEV_COMMIT" "$LIBEV_CONF"
-        LIBEV_INST=$REPO_INST
-        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
-        echo "LIBENV_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
+    deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "LIBEV"
 
     item_download "pmix" "$PMIX_PACK" "$PMIX_URL" "$PMIX_INST" "$PMIX_BRANCH" "$PMIX_COMMIT" "$PMIX_CONF --with-libevent=$LIBEV_INST"
-        PMIX_INST=$REPO_INST
-        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
-        echo "PMIX_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
+    deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "PMIX"
 
     item_download "ucx" "$UCX_PACK" "$UCX_URL" "$UCX_INST" "$UCX_BRANCH" "$UCX_COMMIT" "$UCX_CONF"
-        UCX_INST=$REPO_INST
-        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
-        echo "UCX_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
+    deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "UCX"
 
     item_download "slurm" "$SLURM_PACK" "$SLURM_URL" "$SLURM_INST" "$SLURM_BRANCH" "$SLURM_COMMIT" "$SLURM_CONF --with-ucx=$UCX_INST \
-        --with-pmix=$PMIX_INST --with-hwloc=$HWLOC_INST --with-munge=/usr/"
-        SLURM_INST=$REPO_INST
-        SLURM_SRC=$REPO_SRC
-        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
-        echo "SLURM_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
-        echo "SLURM_SRC=$REPO_SRC">> $DEPLOY_DIR/.deploy_env
-
+ --with-pmix=$PMIX_INST --with-hwloc=$HWLOC_INST --with-munge=$MUNGE_INST"
+    deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "SLURM"
+    
     item_download "ompi" "$OMPI_PACK" "$OMPI_URL" "$OMPI_INST" "$OMPI_BRANCH" "$OMPI_COMMIT" "$OMPI_CONF \
-        --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-pmi=$SLURM_INST \
-        --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST --with-hwloc=$HWLOC_INST"
-        echo "$REPO_NAME $REPO_INST">> $DEPLOY_DIR/.deploy_repo.lst
-        echo "OMPI_INST=$REPO_INST # $REPO_NAME">> $DEPLOY_DIR/.deploy_env
+ --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-pmi=$SLURM_INST \
+ --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST --with-hwloc=$HWLOC_INST"
+    deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "OMPI"
 }
 
 function get_item() {
@@ -299,6 +320,9 @@ function deploy_cleanup_item() {
 }
 
 function deploy_cleanup_all {
+    echo "Slurm daemins will be stopped before cleaning"
+    deploy_slurm_stop
+    
     items_list=`get_repo_item_lst`
     for item_inst in $items_list; do
         deploy_cleanup_item $item_inst
@@ -313,9 +337,10 @@ function deploy_cleanup_all {
 }
 
 function deploy_slurm_start() {
-    slurm_launch
     slurm_ctl_node=`cat $SLURM_INST/etc/local.conf | grep ControlMachine | cut -f2 -d"="`
     exec_remote_as_user_nodes $slurm_ctl_node $SLURM_INST/sbin/slurmctld
+    sleep 3
+    slurm_launch
 }
 
 function deploy_slurm_stop() {
@@ -370,3 +395,19 @@ function slurm_prepare_conf()
     copy_remote_nodes $nodes $SLURM_INST/etc $SLURM_INST
 }
 
+function deploy_ompi_remove_files() {
+    remove_file_list=`cat $1`
+    i=0
+    for file in $remove_file_list; do
+        rm_files=`find $OMPI_INST -name "$file"`
+        for rm_file in $rm_files; do
+            echo -ne "$rm_file      "
+            `rm -f $rm_file`
+            if [ "$?" = "0" ]; then
+                i=$((i+1))
+                echo "removed"
+            fi
+        done
+    done
+    echo "Removed $i files"
+}
