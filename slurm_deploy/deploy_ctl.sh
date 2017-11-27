@@ -303,6 +303,13 @@ function deploy_cleanup_all {
     for item_inst in $items_list; do
         deploy_cleanup_item $item_inst
     done
+    if [ -d "$INSTALL_DIR" ]; then
+        if [ -n "`sanity_check`" ]; then
+            echo_error $LINENO "Error sanity check"
+            exit 1
+        fi
+        rm -rf $INSTALL_DIR
+    fi
 }
 
 function deploy_slurm_start() {
