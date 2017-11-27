@@ -89,9 +89,9 @@ function item_download() {
     else
         if [ -n "$giturl" ]; then
             if [ -n "$branch" ]; then
-                git clone --progress -b $branch $giturl 2>&1 | tee -a $tmp
+                git clone --progress -b $branch $giturl $REPO_NAME
             else
-                git clone --progress $giturl 2>&1 | tee -a $tmp
+                git clone --progress $giturl $REPO_NAME
             fi
         else
             create_dir $SRC_DIR/$REPO_NAME
