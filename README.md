@@ -35,7 +35,7 @@ $ ./deploy_cmd.sh source_prepare
 ```Shell
 $ ./deploy_cmd.sh distribute_all
 ```
-5. Configure Slurm, please see jobstart/slurm_deploy/files/slurm.conf.in for the general configuration and provide the customization file <local.conf> with control machine and partitions description (see jobstart/slurm_deploy/files/local.conf as an example)
+5. Configure Slurm, please see [`jobstart/slurm_deploy/files/slurm.conf.in`](https://github.com/artpol84/jobstart/blob/master/slurm_deploy/files/slurm.conf.in) for the general configuration and provide the customization file <local.conf> with control machine and partitions description (see [`jobstart/slurm_deploy/files/local.conf`](https://github.com/artpol84/jobstart/blob/master/slurm_deploy/files/local.conf) as an example)
 ```Shell
 ./deploy_cmd.sh slurm_config ./local.conf
 ```
