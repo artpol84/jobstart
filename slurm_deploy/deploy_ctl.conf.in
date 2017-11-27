@@ -1,0 +1,30 @@
+#
+# Copyright (C) 2017      Mellanox Technologies, Inc.
+#                         All rights reserved.
+# $COPYRIGHT$
+#
+# Additional copyrights may follow
+#
+# $HEADER$
+#
+
+#!/bin/bash
+
+NODE_LIST=@node_list@
+SLURM_USER=@slurm_user@
+
+# common deploy settings
+DEPLOY_DIR=@deploy_dir@                  # deploy work directory
+SRC_DIR=@deploy_src_dir@                 # source directory
+BUILD_DIR=@deploy_build_dir@             # build directory
+INSTALL_DIR=@deploy_install_dir@         # install directory
+
+# example:
+#REPO_NAME=<repo_name>
+#REPO_PACK=<repo_pack_url>.tar.gz
+# or:
+#REPO_URL=<repo_github>
+# optional:
+#REPO_BRANCH=<branch>
+#REPO_COMMIT=<hash>
+#REPO_CONF="--enable-debug"
