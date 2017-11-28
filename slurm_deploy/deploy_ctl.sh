@@ -128,8 +128,8 @@ EOF
 }
 
 function deploy_item_reset_env() {
-    echo ""> $DEPLOY_DIR/.deploy_repo.lst
-    echo ""> $DEPLOY_DIR/.deploy_env
+    rm -f $DEPLOY_DIR/.deploy_repo.lst
+    rm -f $DEPLOY_DIR/.deploy_env
 }
 
 function deploy_item_save_env() {
@@ -194,6 +194,12 @@ function deploy_build_item() {
     sdir=`pwd`
     cd $SRC_DIR/$item
     echo Starting \"$item\" build
+
+    # add tools path
+    if [ -d "$DEPLOY_DIR/tools/build/bin" ]; then
+        export PATH=$DEPLOY_DIR/tools/build/bin:$PATH
+    fi
+    
     if [ ! -f "configure" ]; then
         if [ -f "autogen.sh" ]; then
             ./autogen.sh || (echo_error $LINENO "$item autogen error" && exit 1)

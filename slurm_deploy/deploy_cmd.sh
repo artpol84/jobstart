@@ -34,6 +34,7 @@ function print_help() {
     echo "      slurm_stop                          stop Slurm daemons" 
     echo "      ompi_remove_files                   removes the list of file from OMPI install dir, should be try before distributing"
     echo "                                          see the list of files to delete in the file: ompi_rm_files.txt"
+    echo "      tools_install                       install automake, autoconf, libtool, flex tools"
 }
 
 case $cmd in
@@ -68,6 +69,14 @@ case $cmd in
         ;;
     ompi_remove_files)
         deploy_ompi_remove_files "ompi_rm_files.txt"
+        ;;
+    tools_download)
+        . ./deploy_tools.sh
+        tools_download
+        ;;
+    tools_install)
+        . ./deploy_tools.sh
+        tools_build
         ;;
     *)
         print_help
