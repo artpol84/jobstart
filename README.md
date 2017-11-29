@@ -9,7 +9,7 @@ cd <rootdir>
 ```
 1. Clone deploy scripts
 ```Shell
-$ git clone git@github.com:artpol84/jobstart.git 
+$ git clone https://github.com/artpol84/jobstart.git 
 ```
 2. Go to the deploy directory:
 ```Shell
