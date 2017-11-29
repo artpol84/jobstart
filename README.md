@@ -16,6 +16,7 @@ $ git clone https://github.com/artpol84/jobstart.git
 cd jobstart/slurm_deploy/
 ```
 3. Setup configuration in `deploy_ctl.conf`
+**NOTE**: You need to set the `INSTALL_DIR` to the directory that is unique for each node (like `/tmp/slurm_deploy`). Otherwise Slurm daemon instances will conflict for the common files.
 
 
 B. Bild and start the installation
