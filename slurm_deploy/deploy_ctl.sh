@@ -85,7 +85,8 @@ function item_download() {
 
     echo "\"$REPO_NAME\" repository downloading..."
     if [ -d $SRC_DIR/$REPO_NAME ]; then
-        echo_error $LINENO "\"$REPO_NAME\" repository already exist, continue..."
+        echo_error $LINENO "\"$REPO_NAME\" repository already exist, use it. Please delete to download ..."
+        return
     else
         if [ -n "$giturl" ]; then
             if [ -n "$branch" ]; then
