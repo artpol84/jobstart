@@ -1,6 +1,8 @@
 #!/bin/bash -e
 
 . ./deploy_ctl.conf
+. ./deploy_ctl.sh
+. ./prepare_lib.sh
 
 M4_URL_BASE="ftp://ftp.gnu.org/gnu/m4"
 M4_VER="1.4.17"
@@ -35,7 +37,7 @@ FLEX_URL=${FLEX_URL_BASE}/$FLEX_DISTR/download
 BASE_PATH=$DEPLOY_DIR/tools
 SRC_PATH=$BASE_PATH/src
 DISTR_PATH=$BASE_PATH/distr
-PREFIX=$BASE_PATH/build
+PREFIX=$INSTALL_DIR/tools
 
 function tools_download() {
     rm -Rf $DISTR_PATH
@@ -58,38 +60,46 @@ function tools_build() {
     rm -Rf $SRC_PATH $PREFIX
     mkdir -p $SRC_PATH
 
+    distribute_nodes=`distribute_get_nodes` # nodes on which the software will be distributed
+    build_node=`hostname`
+    if [ -n "$distribute_nodes" ]; then
+        build_node=`scontrol show hostname $distribute_nodes | head -n 1` # get first node for run build on it
+    fi
+    build_cpus=`ssh $build_node "grep -c ^processor /proc/cpuinfo"`
+
     sdir=`pwd`
     export PATH="$PREFIX/bin/":$PATH
     export LD_LIBRARY_PATH="$PREFIX/bin/":$LD_LIBRARY_PATH
 
     tar -xjvf $DISTR_PATH/$M4_DISTR -C $SRC_PATH
     cd $SRC_PATH/$M4_NAME
-    ./configure --prefix=$PREFIX
-    make
-    make install
+    pdsh -w $build_node "cd $PWD && ./configure --prefix=$PREFIX"
+    pdsh -w $build_node "cd $PWD && make"
+    pdsh -w $build_node "cd $PWD && make install"
 
     tar -xzvf $DISTR_PATH/$AUTOCONF_DISTR -C $SRC_PATH
     cd $SRC_PATH/$AUTOCONF_NAME
-    ./configure --prefix=$PREFIX
-    make
-    make install
+    pdsh -w $build_node "cd $PWD && ./configure --prefix=$PREFIX"
+    pdsh -w $build_node "cd $PWD && make"
+    pdsh -w $build_node "cd $PWD && make install"
 
+    rpath=`ssh $build_node 'echo $PATH'`
     tar -xzvf $DISTR_PATH/$AUTOMAKE_DISTR -C $SRC_PATH
     cd $SRC_PATH/$AUTOMAKE_NAME
-    ./configure --prefix=$PREFIX
-    make
-    make install
+    pdsh -w $build_node "export PATH=$PREFIX/bin:$rpath ; cd $PWD && ./configure --prefix=$PREFIX"
+    pdsh -w $build_node "cd $PWD && make"
+    pdsh -w $build_node "cd $PWD && make install"
 
     tar -xzvf $DISTR_PATH/$LIBTOOL_DISTR -C $SRC_PATH
     cd $SRC_PATH/$LIBTOOL_NAME
-    ./configure --prefix=$PREFIX
-    make
-    make install
+    pdsh -w $build_node "cd $PWD && ./configure --prefix=$PREFIX"
+    pdsh -w $build_node "cd $PWD &&  make"
+    pdsh -w $build_node "cd $PWD && make install"
 
     tar -xjvf $DISTR_PATH/$FLEX_DISTR -C $SRC_PATH
     cd $SRC_PATH/$FLEX_NAME
-    ./configure --prefix=$PREFIX
-    make
-    make install
+    pdsh -w $build_node "cd $PWD && ./configure --prefix=$PREFIX"
+    pdsh -w $build_node "cd $PWD && make"
+    pdsh -w $build_node "cd $PWD && make install"
     cd $sdir
 }
