@@ -154,7 +154,7 @@ function get_node_list()
     fi
 
     if [ -z "$nodes" ]; then
-        echo_error $LINENO "distribute_slurm: No information about nodes found"
+        echo ""
         exit 1
     fi
     echo "$nodes"

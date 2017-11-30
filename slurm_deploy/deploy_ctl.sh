@@ -189,31 +189,49 @@ function get_repo_item_lst() {
 
 function deploy_build_item() {
     item_inst=$1
-	item=`get_item $item_inst`
+    item=`get_item $item_inst`
     light=$2
 
     sdir=`pwd`
+
+    distribute_nodes=`distribute_get_nodes` # nodes on which the software will be distributed
+    build_node=`hostname`
+    if [ -n "$distribute_nodes" ]; then
+        build_node=`scontrol show hostname $distribute_nodes | head -n 1` # get first node for run build on it
+    fi
+    
+    build_cpus=`ssh $build_node "grep -c ^processor /proc/cpuinfo"`
+
     cd $SRC_DIR/$item
     echo Starting \"$item\" build
 
     # add tools path
-    if [ -d "$DEPLOY_DIR/tools/build/bin" ]; then
-        export PATH=$DEPLOY_DIR/tools/build/bin:$PATH
+    tools_installed=`ssh $build_node "test ! -d $INSTALL_DIR/tools/bin"`
+    if [ `ssh $build_node test ! -d $INSTALL_DIR/tools/bin; echo $?` ]; then
+        tools_path="$INSTALL_DIR/tools/bin"
     fi
-    
+
     if [ ! -f "configure" ]; then
+        rpath=`ssh $build_node 'echo $PATH'`
+        echo $rpath
+        echo $tools_path
         if [ -f "autogen.sh" ]; then
-            ./autogen.sh || (echo_error $LINENO "$item autogen error" && exit 1)
+            pdsh -w $build_node "export PATH=$tools_path:$rpath ; cd $PWD && ./autogen.sh || (echo_error $LINENO "$item autogen error" && exit 1)"
         else
-            ./autogen.pl || (echo_error $LINENO "$item autogen error" && exit 1)
+            pdsh -w $build_node "export PATH=$tools_path:$rpath ; cd $PWD && ./autogen.pl || (echo_error $LINENO "$item autogen error" && exit 1)"
         fi
     fi
     cd .build || (echo_error $LINENO "directory change error" && exit 1)
     if [ ! -f "config.log" ]; then
-        ./config.sh || (echo_error $LINENO "$item configure error" && exit 1)
+        pdsh -w $build_node "cd $PWD && ./config.sh || (echo_error $LINENO "$item configure error" && exit 1)"
     fi
-    make -j $CPU_NUM install || (echo_error $LINENO "$item make error" && exit 1)
+    if [ ! -f ".deploy_build_flag" ]; then
+        pdsh -w $build_node "cd $PWD && make -j $build_cpus && echo 1 > .deploy_build_flag || (echo_error $LINENO "$item make error" && exit 1)"
+    fi
+    make -j $build_cpus install || (echo_error $LINENO "$item make error" && exit 1)
     cd $sdir
+
+    deploy_distribute_item $item_inst
 }
 
 function deploy_build_all() {
@@ -293,7 +311,10 @@ function distribute_get_nodes()
         exit 1
     fi
     nodes=`get_node_list`
-
+    if [ -z "$nodes" ]; then
+        echo ""
+        return
+    fi
     head_node=`node_is_head`
     if [ ! -z $head_node ]; then
         nodes=`get_node_list_wo_head`
@@ -327,7 +348,7 @@ function deploy_cleanup_item() {
 }
 
 function deploy_cleanup_all {
-    echo "Slurm daemins will be stopped before cleaning"
+    echo "Slurm daemons will be stopped before cleaning"
     deploy_slurm_stop
     
     items_list=`get_repo_item_lst`
