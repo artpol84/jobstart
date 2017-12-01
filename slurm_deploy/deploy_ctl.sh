@@ -217,7 +217,7 @@ function deploy_build_item() {
     if [ -n "$distribute_nodes" ]; then
         build_node=`scontrol show hostname $distribute_nodes | head -n 1` # get first node for run build on it
     fi
-    
+
     build_cpus=`ssh $build_node "grep -c ^processor /proc/cpuinfo"`
 
     cd $SRC_DIR/$item
@@ -421,7 +421,12 @@ function deploy_cleanup_remote {
 }
 
 function deploy_slurm_start() {
-    slurm_ctl_node=`cat $SLURM_INST/etc/local.conf | grep ControlMachine | cut -f2 -d"="`
+    distribute_nodes=`distribute_get_nodes` # nodes on which the software will be distributed
+    first_node=`hostname`
+    if [ -n "$distribute_nodes" ]; then
+        first_node=`scontrol show hostname $distribute_nodes | head -n 1` # get first node for run build on it
+    fi
+    slurm_ctl_node=`ssh $first_node cat $SLURM_INST/etc/local.conf | grep ControlMachine | cut -f2 -d"="`
     exec_remote_as_user_nodes $slurm_ctl_node $SLURM_INST/sbin/slurmctld
     sleep 3
     slurm_launch
@@ -516,7 +521,7 @@ export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
 
 EOF
     chmod +x $env_file
-    
+
     if [ "$?" != "0" ]; then
         echo "Cannot generate env file"
         exit 1
