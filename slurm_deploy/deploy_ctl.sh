@@ -30,12 +30,16 @@ function create_dir() {
         exit 1
     fi
     mkdir $1
+    if [ "$?" != "0" ]; then
+        echo "Cannot continue"
+        exit 1
+    fi
 }
 
 function check_file() {
     file=$1
     if [ ! -f "$file" ]; then
-        echo File \"$file\" not found. Can not continue.
+        echo "File \"$file\" not found. Cannot continue."
         exit 1
     fi
 }
@@ -86,7 +90,6 @@ function item_download() {
     echo "\"$REPO_NAME\" repository downloading..."
     if [ -d $SRC_DIR/$REPO_NAME ]; then
         echo_error $LINENO "\"$REPO_NAME\" repository already exist, use it. Please delete to download ..."
-        return
     else
         if [ -n "$giturl" ]; then
             if [ -n "$branch" ]; then
@@ -94,35 +97,50 @@ function item_download() {
             else
                 git clone --progress $giturl $REPO_NAME
             fi
+            if [ "$?" != "0" ]; then
+                echo_error $LINENO "\"$REPO_NAME\" Repository can not be obtained. Cannot continue. "
+                exit 1
+            fi
         else
             create_dir $SRC_DIR/$REPO_NAME
             curl -L $packurl | tar -xz -C $SRC_DIR/$REPO_NAME --strip-components 1
             if [ "0" -ne "${PIPESTATUS[0]}" ]; then
-                echo_error $LINENO "\"$REPO_NAME\" repository can not be obtained"
+                echo_error $LINENO "\"$REPO_NAME\" Repository can not be obtained. Cannot continue. "
                 rm -rf $SRC_DIR/$REPO_NAME
                 exit 1
             fi
         fi
+        
+        if [ -n "$commit" ]; then
+            cd $REPO_SRC
+            git checkout -b test $commit
+            cd -
+        fi
     fi
-    cd $REPO_SRC
-    if [ -n "$commit" ]; then
-        git checkout -b test $commit
+
+    if [ "$?" != "0" ]; then
+        echo_error $LINENO "\"$REPO_NAME\": Repository can not be prepared. Cannot continue."
+        exit 1
     fi
-    build=$REPO_SRC/.build
-    #rm -rf .build
-    if [ ! -d ".build" ]; then
-        create_dir .build
+
+    build=$REPO_NAME/.build
+    if [ ! -d "$build" ]; then
+        create_dir $build
     fi
-    #cd $build
 
     fix_config=`echo "$config " | sed -e 's/--with-[a-z]*= //g'`
-    config=$fix_config
+    config="--prefix=$REPO_INST $fix_config"
 
+    if [ -n "$config" ]; then
+        echo "\"$REPO_NAME\": the following config will be configure : \"$config\""
+    fi
+
+    
 # create the configure script for we can configure it later
     cat > $build/config.sh << EOF
 #!/bin/bash
 
-$REPO_SRC/configure --prefix=$REPO_INST $config
+$REPO_SRC/configure $config
 EOF
     chmod +x $build/config.sh
     cd $sdir
@@ -213,22 +231,44 @@ function deploy_build_item() {
 
     if [ ! -f "configure" ]; then
         rpath=`ssh $build_node 'echo $PATH'`
-        echo $rpath
-        echo $tools_path
         if [ -f "autogen.sh" ]; then
-            pdsh -w $build_node "export PATH=$tools_path:$rpath ; cd $PWD && ./autogen.sh || (echo_error $LINENO "$item autogen error" && exit 1)"
+            pdsh -S -w $build_node "export PATH=$tools_path:$rpath ; cd $PWD && ./autogen.sh"
         else
-            pdsh -w $build_node "export PATH=$tools_path:$rpath ; cd $PWD && ./autogen.pl || (echo_error $LINENO "$item autogen error" && exit 1)"
+            pdsh -S -w $build_node "export PATH=$tools_path:$rpath ; cd $PWD && ./autogen.pl"
+        fi
+        ret=$?
+        if [ "$ret" != "0" ]; then
+            echo_error $LINENO "\"$item\" Remote Autogen error. Tries to run Autogen locally..."
+            if [ -f "autogen.sh" ]; then
+                export PATH=$tools_path:$rpath && ./autogen.sh
+            else
+                export PATH=$tools_path:$rpath && ./autogen.pl
+            fi
+        fi
+        if [ "$?" != "0" ]; then
+            echo_error $LINENO "\"$item\" Autogen error. Cannot continue."
+            rm configure 2> /dev/null
+            exit 1
         fi
     fi
     cd .build || (echo_error $LINENO "directory change error" && exit 1)
     if [ ! -f "config.log" ]; then
-        pdsh -w $build_node "cd $PWD && ./config.sh || (echo_error $LINENO "$item configure error" && exit 1)"
+        pdsh -S -w $build_node "cd $PWD && ./config.sh"
+        if [ "$?" != "0" ]; then
+            echo_error $LINENO "\"$item\" Configure error. Cannot continue."
+            mv config.log config.log.bak
+            exit 1
+        fi
     fi
     if [ ! -f ".deploy_build_flag" ]; then
-        pdsh -w $build_node "cd $PWD && make -j $build_cpus && echo 1 > .deploy_build_flag || (echo_error $LINENO "$item make error" && exit 1)"
+        pdsh -S -w $build_node "cd $PWD && make -j $build_cpus"
+        if [ "$?" != "0" ]; then
+            echo_error $LINENO "\"$item\" Build error. Cannot continue."
+            exit 1
+        fi
+        echo 1 > .deploy_build_flag
     fi
-    make -j $build_cpus install || (echo_error $LINENO "$item make error" && exit 1)
+    make -j $CPU_NUM install || (echo_error $LINENO "$item make error" && exit 1)
     cd $sdir
 
     deploy_distribute_item $item_inst
@@ -259,6 +299,8 @@ function deploy_build_all() {
     slurm_finalize_install
 
     cd $sdir
+    
+    deploy_env_gen
 }
 
 function deploy_build_clean() {
@@ -362,6 +404,20 @@ function deploy_cleanup_all {
         fi
         rm -rf $INSTALL_DIR
     fi
+    nodes=`distribute_get_nodes`
+    exec_remote_nodes $nodes rm -rf $INSTALL_DIR
+}
+
+function deploy_cleanup_remote {
+    echo "Slurm daemons will be stopped before cleaning"
+    deploy_slurm_stop
+    
+    items_list=`get_repo_item_lst`
+    for item_inst in $items_list; do
+        deploy_cleanup_item $item_inst
+    done
+    nodes=`distribute_get_nodes`
+    exec_remote_nodes $nodes rm -rf $INSTALL_DIR    
 }
 
 function deploy_slurm_start() {
@@ -438,4 +494,32 @@ function deploy_ompi_remove_files() {
         done
     done
     echo "Removed $i files"
+}
+
+function deploy_env_gen() {
+    local env_file=$DEPLOY_DIR/deploy_env.sh
+    local path=
+    local libs=
+    items_list=`get_repo_item_lst`
+    for item_inst in $items_list; do
+        local item_env
+        item_env=`cat $DEPLOY_DIR/.deploy_env | grep $item_inst | cut -f2 -d "=" | awk '{print $1}'`
+        path=$path:$item_env/bin
+        libs=$path:$item_env/lib
+    done
+
+    cat > $env_file << EOF
+#!/bin/bash
+
+export PATH=$path:$PATH
+export LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH
+
+EOF
+    chmod +x $env_file
+    
+    if [ "$?" != "0" ]; then
+        echo "Cannot generate env file"
+        exit 1
+    fi
+    echo "The env file was generated to $env_file"
 }
