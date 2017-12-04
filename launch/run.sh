@@ -7,8 +7,13 @@ setup_common
 
 export OMPI_MCA_btl=self
 export OMPI_MCA_pml=ucx
+export OMPI_MCA_spml=ucx
 
 comm_set=0
+
+# Use full modex by default. Can be changed with "dmdx" parameter
+export OMPI_MCA_pmix_base_async_modex=false
+export OMPI_MCA_pmix_base_collect_data=true
 
 while [ -n "$1" ]; do
     found=1
@@ -24,11 +29,11 @@ while [ -n "$1" ]; do
 
     case "$1" in
     "dtcp")
-        setup_dtcp
+        setup_dtcp $TEST_UCX_DEV $TEST_UCX_TLS
         shift
         ;;
     "sapi")
-        setup_sapi
+        setup_sapi $TEST_UCX_DEV $TEST_UCX_TLS
         shift
         ;;
     "ducx")
@@ -50,6 +55,11 @@ while [ -n "$1" ]; do
         ;;
     "timing")
         export OMPI_TIMING_ENABLE=1
+        shift
+        ;;
+    "dmdx")
+        export OMPI_MCA_pmix_base_async_modex=true
+        export OMPI_MCA_pmix_base_collect_data=false
         shift
         ;;
     *)

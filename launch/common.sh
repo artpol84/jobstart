@@ -18,11 +18,19 @@ function setup_pp()
 
 function setup_sapi()
 {
+    local ucx_dev=${1:-mlx5_0:1}
+    local ucx_tls=${2:-rc}
+    export UCX_NET_DEVICES=$ucx_dev
+    export UCX_TLS=$ucx_tls
     export SLURM_PMIX_DIRECT_CONN="false"
 }
 
 function setup_dtcp()
 {
+    local ucx_dev=${1:-mlx5_0:1}
+    local ucx_tls=${2:-rc}
+    export UCX_NET_DEVICES=$ucx_dev
+    export UCX_TLS=$ucx_tls
     export SLURM_PMIX_DIRECT_CONN="true"
     export SLURM_PMIX_DIRECT_CONN_UCX="false"
 }
