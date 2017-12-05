@@ -29,7 +29,7 @@ function create_dir() {
         echo Can not create directory. Bad param.
         exit 1
     fi
-    mkdir $1
+    mkdir -p $1
     if [ "$?" != "0" ]; then
         echo "Cannot continue"
         exit 1
@@ -240,9 +240,9 @@ function deploy_build_item() {
         if [ "$ret" != "0" ]; then
             echo_error $LINENO "\"$item\" Remote Autogen error. Tries to run Autogen locally..."
             if [ -f "autogen.sh" ]; then
-                export PATH=$tools_path:$rpath && ./autogen.sh
+                export PATH=$tools_path:$PATH && ./autogen.sh
             else
-                export PATH=$tools_path:$rpath && ./autogen.pl
+                export PATH=$tools_path:$PATH && ./autogen.pl
             fi
         fi
         if [ "$?" != "0" ]; then
@@ -262,16 +262,27 @@ function deploy_build_item() {
     fi
     if [ ! -f ".deploy_build_flag" ]; then
         pdsh -S -w $build_node "cd $PWD && make -j $build_cpus"
-        if [ "$?" != "0" ]; then
+        ret=$?
+        if [ "$ret" != "0" ]; then
             echo_error $LINENO "\"$item\" Build error. Cannot continue."
             exit 1
         fi
         echo 1 > .deploy_build_flag
     fi
-    make -j $CPU_NUM install || (echo_error $LINENO "$item make error" && exit 1)
+    pdsh -S -w $build_node "cd $PWD && make -j $build_cpus install"
+    ret=$?
+    if [ "$?" != "0" ]; then
+        echo_error $LINENO "\"$item\" `make install` error. Cannot continue."
+        exit 1
+    fi
     cd $sdir
 
-    deploy_distribute_item $item_inst
+    if [ `hostname` != "$build_node" ]; then
+        if [ ! -d "$item_inst" ]; then
+            create_dir $item_inst
+        fi
+        scp -r $build_node:$item_inst $INSTALL_DIR
+    fi
 }
 
 function deploy_build_all() {
