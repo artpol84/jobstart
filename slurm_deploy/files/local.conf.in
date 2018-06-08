@@ -1,0 +1,12 @@
+EpilogSlurmctld=/etc/slurm/slurmctld_epilog.sh
+
+#HealthCheckProgram=/usr/sbin/nhc
+#HealthCheckInterval=300
+# LOGGING AND ACCOUNTING 
+AccountingStorageEnforce=0
+SlurmdTimeout=300
+
+ClusterName=@cluster_name@
+NodeName=@node_list@            CPUs=@node_cpus@ Sockets=@node_sock_num@ CoresPerSocket=@node_core_per_socket@ ThreadsPerCore=@node_thread_per_core@ State=UNKNOWN
+PartitionName=@partition@       Nodes=@node_list@ DefaultTime=120 Default=NO State=UP AllocNodes=@node_ctl@,@node_list@
+ControlMachine=@node_ctl@
