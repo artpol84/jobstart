@@ -246,6 +246,14 @@ function node_is_head()
     head_node=`scontrol show hostname $nodes | grep \`hostname\``
     echo $head_node
 }
+
+function get_first_node()
+{
+    nodes=`get_node_list`
+    first_node=`scontrol show hostname $nodes`
+    echo $first_node | cut -d" " -f1
+}
+
 function get_node_list_wo_head()
 {
     nodes=`get_node_list`

@@ -469,19 +469,30 @@ function slurm_prepare_conf()
         cp -f $slurm_conf $SLURM_INST/etc/local.conf
     else
         local tdir=./.conf_tmp
-
         rm -fR $tdir
         mkdir $tdir
-        # Remove unneeded portions
-        cat /etc/slurm/local.conf | grep -v "ControlMachine" | \
-            grep -v "BackupController" | \
-            grep -v "local_dbd" | \
-            grep -v "TopologyPlugin" | \
-            sed -e "s/AllocNodes=[a-z,0-9\-]*/AllocNodes=`hostname`/g" | \
-            sed -e "s/RealMemory=[0-9]* //g" >  $tdir/local.conf
+        
+        compute_node=`get_first_node`
 
-        echo >> $tdir/local.conf
-        echo "ControlMachine=`hostname`" >> $tdir/local.conf
+        #get CPU params from the compute node
+        CPUS=`pdsh -N -w $compute_node nproc`
+        THREAD_PER_CORE=`pdsh -N -w $compute_node lscpu | grep -i "Thread(s) per core:" | cut -d":" -f2 | tr -d '[:space:]'`
+        CORE_PER_SOCK=`pdsh -N -w $compute_node lscpu | grep -i "Core(s) per socket" | cut -d":" -f2 | tr -d '[:space:]'`
+        SOCKETS=`pdsh -N -w $compute_node lscpu | grep -i "Socket(s)" | cut -d":" -f2 | tr -d '[:space:]'`
+        CONTROL_MACHINE=`hostname`
+        CFG_NODE_LIST=`get_node_list`
+
+        #gnerate a confug file
+        cat $FILES/local.conf.in | \
+            sed -e "s/@cluster_name@/deploy/g" | \
+            sed -e "s/@node_cpus@/$CPUS/g" | \
+            sed -e "s/@node_sock_num@/$SOCKETS/g" | \
+            sed -e "s/@node_core_per_socket@/$CORE_PER_SOCK/g" | \
+            sed -e "s/@node_thread_per_core@/$THREAD_PER_CORE/g" | \
+            sed -e "s/@node_list@/$CFG_NODE_LIST/g" | \
+            sed -e "s/@partition@/$SLURM_JOB_PARTITION/g" | \
+            sed -e "s/@node_ctl@/$CONTROL_MACHINE/g" > $tdir/local.conf
+
         cp $tdir/local.conf $SLURM_INST/etc/
         rm -fR $tdir
     fi
