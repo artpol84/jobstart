@@ -28,6 +28,7 @@ function print_help() {
     echo "      distribute_all                      propagates the installed directories to the all nodes"
     echo "      cleanup_all                         cleans all install diretories, Slurm daemons will be stopped before cleaning"
     echo "      cleanup_remote                      cleans only remotes install directories, Slurm daemons will be stopped before cleaning"
+    echo "      cleanup_tmp                         cleans remote and local tmp dirs, Slurm daemons will be stopped before cleaning"
     echo "      slurm_update <light>"
     echo "      plugin_update                       Slurm PMIx plugin rebuild and distribute to the all nodes"
     echo "      source_prepare                      download software, prepare configs"
@@ -65,6 +66,9 @@ case $cmd in
         ;;
     cleanup_remote)
         deploy_cleanup_remote
+        ;;
+    cleanup_tmp)
+        deploy_cleanup_tmp
         ;;
     slurm_stop)
         deploy_slurm_stop
