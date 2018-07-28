@@ -431,6 +431,21 @@ function deploy_cleanup_remote {
     exec_remote_nodes $nodes rm -rf $INSTALL_DIR    
 }
 
+function deploy_cleanup_tmp {
+    echo "Slurm daemons will be stopped before cleaning"
+    deploy_slurm_stop
+    nodes=`distribute_get_nodes`
+    if [ ! -d "$INSTALL_DIR/slurm" ]; then
+        echo_error $LINENO "Error: Slurm installation directory does not exist"
+        exit
+    fi
+    rm -rf $INSTALL_DIR/slurm/tmp/*
+    rm -rf $INSTALL_DIR/slurm/var/*
+    exec_remote_nodes $nodes rm -rf $INSTALL_DIR/slurm/tmp/*
+    exec_remote_nodes $nodes rm -rf $INSTALL_DIR/slurm/var/*
+    echo "OK"
+}
+
 function deploy_slurm_start() {
     distribute_nodes=`distribute_get_nodes` # nodes on which the software will be distributed
     first_node=`hostname`
