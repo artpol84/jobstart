@@ -275,6 +275,12 @@ function deploy_build_item() {
         echo_error $LINENO "\"$item\" `make install` error. Cannot continue."
         exit 1
     fi
+
+    if [ $item = "slurm" ]; then
+         pdsh -S -w $build_node "cd $PWD/contribs/pmi && make -j $build_cpus install"
+         pdsh -S -w $build_node "cd $PWD/contribs/pmi2 && make -j $build_cpus install"
+    fi
+
     cd $sdir
 
     if [ `hostname` != "$build_node" ]; then
