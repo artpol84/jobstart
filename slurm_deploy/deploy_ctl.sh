@@ -78,6 +78,17 @@ function item_download() {
     REPO_SRC=$SRC_DIR/$REPO_NAME
     REPO_INST=$INSTALL_DIR/$REPO_NAME
 
+    fix_config_prefix=""
+    for arg in $config; do
+        arg_name=`echo $arg | cut -d= -f1`
+        if [ $arg_name = "--prefix" ]; then
+            REPO_INST=`echo $arg | cut -d= -f2`
+        else
+            fix_config_prefix="$fix_config_prefix $arg"
+        fi
+    done
+    config=" --prefix=$REPO_INST $fix_config_prefix"
+
     if [ ! -d "$SRC_DIR" ]; then
         mkdir -p $SRC_DIR
         if [ ! -d $SRC_DIR ]; then
@@ -128,8 +139,7 @@ function item_download() {
         create_dir $build
     fi
 
-    fix_config=`echo "$config " | sed -e 's/--with-[a-z]*= //g'`
-    config="--prefix=$REPO_INST $fix_config"
+    config=`echo "$config " | sed -e 's/--with-[a-z]*= //g'`
 
     if [ -n "$config" ]; then
         echo "\"$REPO_NAME\": the following config will be configure : \"$config\""
@@ -275,6 +285,12 @@ function deploy_build_item() {
         echo_error $LINENO "\"$item\" `make install` error. Cannot continue."
         exit 1
     fi
+
+    if [ $item = "slurm" ]; then
+         pdsh -S -w $build_node "cd $PWD/contribs/pmi && make -j $build_cpus install"
+         pdsh -S -w $build_node "cd $PWD/contribs/pmi2 && make -j $build_cpus install"
+    fi
+
     cd $sdir
 
     if [ `hostname` != "$build_node" ]; then
