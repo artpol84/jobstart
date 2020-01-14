@@ -21,4 +21,4 @@ mkdir logs/
 cp $INSTALL_DIR/slurm/var/slurmd.log logs/`hostname`
 
 #clear log
-echo "" > $iNSTALL_DIR/slurm/var/slurmd.log
+echo "" > $INSTALL_DIR/slurm/var/slurmd.log
