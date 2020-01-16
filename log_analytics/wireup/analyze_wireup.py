@@ -3,6 +3,8 @@
 import datetime
 import re
 import lFilter as lf
+import os
+import sys
 
 # Database structures
 
@@ -35,53 +37,104 @@ flt = lf.lFilter(6.8, regex, fdescr, "function")
 
 class message:
     def __init__(self):
-        self._src = -1
-        self._dst = -1
         self._size = 0
+        self._mid = -1
         self.ts = { }
-        self.ts["send"] = { }
-        self.ts["recv"] = { }
 
-    def dst(self, peer):
-        self._dst = peer
-    def dst(self):
-        return self._dst
-
-    def src(self, peer):
-        self._src = peer
-    def src(self):
-        return self._src
-
-    def size(self, size):
+    def set_size(self, size):
         self._size = size
     def size(self):
         return self._size
 
-    def set_ts(self, dir, state, ts):
-        self.ts[dir][status] = ts
+    def set_mid(self, mid):
+        self._mid = mid
+    def mid(self):
+        return self._mid
 
-    def in_state(self, dir, state):
-        return (state in self.ts[dir].keys())
+    def in_state(self, side, state):
+        if( not (side in self.ts.keys())):
+            self.ts[side] = { }
+        return (state in self.ts[side].keys())
+
+    def dump_states(self, side):
+        states = ""
+        if( not (side in self.ts.keys())):
+            self.ts[side] = { }
+        for state in self.ts[side].keys():
+            states += state + ", "
+        return states
+
+    def set_ts(self, side, state, ts):
+        assert (not self.in_state(side, state)), "ERROR: Double message state initialization"
+        self.ts[side][state] = ts
 
 class channel:
-    def __init__(self)
-        channel = { }
-        channel["send"] = { }
-        channel["recv"] = { }
+    def __init__(self):
+        self.ch = { }
+        self.ch["send"] = { }
+        self.ch["recv"] = { }
+        self.fifo = { }
+        self.fifo["send"] = []
+        self.fifo["recv"] = []
 
-    def enqueue(dir, msg)
-        if( not (msg.dst in channel[dir].keys())):
-            channel[dir] = []
-        channel[dir].append(msg)
+    def update(self, side, mid, mtype, size, ts):
+        if( not (mid in self.ch[side].keys())):
+            msg = message()
+            msg.set_size(size)
+            msg.set_mid(mid)
+            self.ch[side][mid] = msg
+            self.fifo[side].append(msg)
+        msg = self.ch[side][mid]
+        assert (self.ch[side][mid].size() == size), "Message size mismatch"
+        msg.set_ts(side, mtype, ts)
 
-    def get_next(dir, dst, state):
-        if( not (dst in channel[dir].keys())):
-            return None
-        for i in channel[dir][dst]:
-            if (not msg.in_state(dir, state)) :
-                return msg
+    def match(self):
+        l = min(len(self.fifo["send"]), len(self.fifo["recv"]))
+        for i in xrange(0, l):
+            print "Match message #", i
+            smsg = self.fifo["send"][i]
+            rmsg = self.fifo["recv"][i]
+            if (smsg.size() != rmsg.size()):
+                ret = "Matching ERROR: message #" + str(i) + ": size: send=" + str(smsg.size()) + " recv=" + str(rmsg.size())
+                return ret
+            if (not smsg.in_state("send", "completed")):
+                ret = "Matching ERROR: message #" + str(i) + ": send is not completed: " + smsg.dump_states("send")
+                return ret
+            if (not rmsg.in_state("recv", "completed")):
+                ret = "Matching ERROR: message #" + str(i) + ": recv is not completed: " + rmsg.dump_states("recv")
+                return ret
+        if ( len(self.fifo["send"]) != len(self.fifo["recv"]) ):
+            ret = "Matching ERROR: mismatch in # of send and recv messages: send=" + str( len(self.fifo["send"]) ) + " recv=" + str( len(self.fifo["recv"]) )
+            return ret
         return None
 
+
+class channelMatrix:
+    def __init__(self):
+        self.matrix = { }
+    def update(self, src, dst, side, mtype, mid, size, ts):
+        if( not (src in self.matrix.keys())):
+            self.matrix[src] = { }
+        if( not (dst in self.matrix[src].keys())):
+            self.matrix[src][dst] = channel()
+        self.matrix[src][dst].update(side, mid, mtype, size, ts)
+
+    def match(self):
+        print "src keys: ", self.matrix.keys()
+        for src in self.matrix.keys():
+            print "dst keys: ", self.matrix[src].keys()
+            for dst in self.matrix[src].keys():
+                print "src = ", src, " dst = ", dst
+                err = self.matrix[src][dst].match()
+                if( err != None):
+                    print "(", str(src) + ",", str(dst), "): ", err
+
+    def analysis(self):
+        # Verify message send/recv matching
+        self.match()
+
+wireup_matrix = channelMatrix()
+ucx_matrix = channelMatrix()
 
 class clusterNode:
     def __init__(self, nodeid):
@@ -105,6 +158,9 @@ class baseFilter:
     WIREUP_CONNECTED = 5
 
     def __init__(self, flt):
+        self.send_msg_id = 0
+        self.recv_msg_id = 0
+
         # Plugin startup time
         fields = { "function" : "p_mpi_hook_slurmstepd_prefork" }
         flt.add(fields, self, self.PSTART);
@@ -130,9 +186,10 @@ class baseFilter:
         print "pline = ", pline["nodeid"]
         nodeid = int(pline["nodeid"])
         n = getNode(nodeid)
+        ts = float(pline["timestamp"])
         if (fid == self.PSTART):
             print "Set the start time for nodeid = ", nodeid
-            n.progress["start"] = pline["timestamp"]
+            n.progress["start"] = ts
             return 1
 
         if ( fid == self.HOSTNAME ):
@@ -144,22 +201,20 @@ class baseFilter:
         if ( fid == self.EARLY_WIREUP_START ):
             if( pline["logline"].find("WIREUP/early: start") != -1 ):
                 print "Record early wireup beginning on nodeid=", nodeid
-                n.progress["ewp_start"] = pline["timestamp"]
+                n.progress["ewp_start"] = ts
                 return 1
 
         if ( fid == self.EARLY_WIREUP_THREAD ):
             if( pline["logline"].find("WIREUP/early: complete") != -1 ):
                 print "Record early wireup finishing on nodeid=", nodeid
-                n.progress["ewp_done"] = pline["timestamp"]
+                n.progress["ewp_done"] = ts
                 return 1
             elif( pline["logline"].find("WIREUP/early: sending initiation message to nodeids:") != -1 ):
                 l1 = pline["logline"].split(":")
                 l2 = l1[2].strip().split(" ")
                 for dst in l2:
-                    msg = message()
-                    msg.dst(dst)
-                    msg.set_ts("send", "completed",  pline["timestamp"])
-                    n.wireup.enqueue("send", msg)
+                    self.send_msg_id += 1
+                    wireup_matrix.update(nodeid, dst, "send", "completed", self.send_msg_id, 0, ts)
                 return 1
 
         if ( fid == self.WIREUP_CONNECTED ):
@@ -169,152 +224,65 @@ class baseFilter:
             if( m != None ):
                 src = m.group(1)
                 msg = message()
-                msg.sc(src)
-                msg.set_ts("recv", "complete", pline["timestamp"])
-                n.wireup.enqueue("recv", msg)
-                print "nodeid=", nodeid, " connected to ", src
+                self.recv_msg_id += 1
+                wireup_matrix.update(src, nodeid, "recv", "completed", self.recv_msg_id, 0, ts)
                 return 1
-
         return 0
-
-    def action(obj, pline):
-        obj._action(pline)
-    progress = { }
 
 bf = baseFilter(flt)
 
 # Database
 
-        PMIXP_DEBUG("UCX: send [pending] to nodeid=%d, size=%zu",
-                priv->nodeid, msize);
-        pmixp_rlist_enq(&priv->pending, msg);
-    } else {
-        pmixp_ucx_req_t *req = NULL;
-        xassert(_direct_hdr_set);
-        char *mptr = _direct_hdr.buf_ptr(msg);
-        req = (pmixp_ucx_req_t*)
-            ucp_tag_send_nb(priv->server_ep,
-                    (void*)mptr, msize,
-                    ucp_dt_make_contig(1),
-                    pmixp_info_nodeid(), send_handle);
-        if (UCS_PTR_IS_ERR(req)) {
-            PMIXP_ERROR("Unable to send UCX message: %s\n",
-                    ucs_status_string(UCS_PTR_STATUS(req)));
-            goto exit;
-        } else if (UCS_OK == UCS_PTR_STATUS(req)) {
-            /* defer release until we unlock ucp worker */
-            PMIXP_DEBUG("UCX: send [inline] to nodeid=%d, size=%zu",
-                    priv->nodeid, msize);
-            release = true;
-        } else {
-            PMIXP_DEBUG("UCX: send [regular] to nodeid=%d, size=%zu",
-
 class ucxFilter:
-    SEND = 1
-    COMPLETE = 2
-
     def __init__(self, flt):
         # Plugin startup time
         fields = { "function" : "_ucx_send" }
-        flt.add(fields, self, self.SEND);
+        flt.add(fields, self, 1)
+        fields = { "function" : "send_handle" }
+        flt.add(fields, self, 1)
+        fields = { "function" : "_ucx_progress" }
+        flt.add(fields, self, 1)
 
     def bfilter(self, pline, fid):
         nodeid = int(pline["nodeid"])
         n = getNode(nodeid)
-        if (fid == self.SEND):
-            ts = float(pline["timestamp"]
-            regex_tmp = ".*UCX: send [(\S+)] to nodeid=(\d+), size=(\d+)"
-            t = re.compile(regex_tmp)
-            m = t.match(pline["logline"])
-            if( m != None ):
-                dst = m.group(2)
-                mtype = m.group(1)
-                size = m.group(3)
-                msg = n.ucxcomm.get_next("send", dst, mtype)
-                if (msg == None):
-                    msg = message()
-                    msg.dst(dst)
-                    msg.size(size)
-                    msg.set_ts("send", mtype, ts)
-                    n.ucxcomm.enqueue("send", msg)
-                else:
-                    assert (msg.size() == size) "The assumption of sequential message processing doesn't hold"
-                    assert (!msg.in_state("send", mtype)) "Double state transition"
-                    
-
-
-                msg.size(m.group(3))
-
-                msg = message()
-                
-                
-                msg.send_pending(dst, ts)
-                if (mtype == "regular" or mtype == "inline"):
-                    msg.send_enq(ts)
-                if (mtype == "inline"):
-                    msg.send_complete(ts)
-                n.
+        ts = float(pline["timestamp"])
+        regex_tmp = ".*UCX:\s*(\S+)\s*\[(\S+)\]\s*nodeid=(\d+),\s*mid=(\d+),\s*size=(\d+)"
+        t = re.compile(regex_tmp)
+        m = t.match(pline["logline"])
+        if( m != None ):
+            side = m.group(1)
+            mtype = m.group(2)
+            peer = int(m.group(3))
+            mid = int(m.group(4))
+            size = int(m.group(5))
+            if (side == "send"):
+                src = nodeid
+                dst = peer
+            elif (side == "recv"):
+                src = peer
+                dst = nodeid
+            else:
+                assert (False), ("Unsupported UCX operation type: " + side + "; Only 'recv' and 'send' are supported")
+            ucx_matrix.update(src, dst, side, mtype, mid, size, ts)
             return 1
-
-        if ( fid == self.HOSTNAME ):
-            if( pline["logline"].find("Start agent thread") != -1 ):
-                print "Set the hostname of nodeid=", nodeid, " to ", pline["hostname"]
-                n.hostname = pline["hostname"]
-                return 1
-
-        if ( fid == self.EARLY_WIREUP_START ):
-            if( pline["logline"].find("WIREUP/early: start") != -1 ):
-                print "Record early wireup beginning on nodeid=", nodeid
-                n.progress["ewp_start"] = pline["timestamp"]
-                return 1
-
-        if ( fid == self.EARLY_WIREUP_THREAD ):
-            if( pline["logline"].find("WIREUP/early: complete") != -1 ):
-                print "Record early wireup finishing on nodeid=", nodeid
-                n.progress["ewp_done"] = pline["timestamp"]
-                return 1
-            elif( pline["logline"].find("WIREUP/early: sending initiation message to nodeids:") != -1 ):
-                l1 = pline["logline"].split(":")
-                l2 = l1[2].strip().split(" ")
-                for dst in l2:
-                    msg = message()
-                    msg.send(dst, pline["timestamp"])
-                    n.wireup["out"].append(msg)
-                return 1
-
-        if ( fid == self.WIREUP_CONNECTED ):
-            regex_tmp = "\s*WIREUP: Connect to (\d+).*"
-            t = re.compile(regex_tmp)
-            m = t.match(pline["logline"])
-            if( m != None ):
-                src = m.group(1)
-                msg = message()
-                msg.recv(src, pline["timestamp"])
-                n.wireup["in"].append(msg)
-                print "nodeid=", nodeid, " connected to ", src
-                return 1
-
         return 0
 
-    def action(obj, pline):
-        obj._action(pline)
-    progress = { }
+uf = ucxFilter(flt)
 
+# Read input data
+assert( len(sys.argv) == 2), "Need directory name"
+path = sys.argv[1]
 
+root, dnames, fnames = os.walk(path):
 
+data = []
+# Read file
+for fname in fnames:
+    with open(fname, 'r') as f:
+        text = f.readlines()
+    f.close()
+    for l in text:
+        flt.apply(l)
 
-
-str="[2020-01-15T04:07:51.707] [6.8] debug:  [(null):0] [1579054071.707138] [mpi_pmix.c:153:p_mpi_hook_slurmstepd_prefork] mpi/pmix:  start"
-print("filter:", flt.apply(str))
-
-str="[2020-01-15T04:07:51.933] [6.8] debug:  [clx-hercules-004:0] [1579054071.933820] [pmixp_agent.c:227:_agent_thread] mpi/pmix:  Start agent thread"
-print("filter:", flt.apply(str))
-
-str="[2020-01-15T04:07:51.934] [6.8] debug:  [clx-hercules-004:0] [1579054071.934096] [pmixp_server.c:1323:_wireup_thread] mpi/pmix:  WIREUP/early: sending initiation message to nodeids: 1 "
-print("filter:", flt.apply(str))
-
-str="[2020-01-15T04:07:51.935] [6.8] debug:  [clx-hercules-004:0] [1579054071.935396] [pmixp_server.c:1330:_wireup_thread] mpi/pmix:  WIREUP/early: complete"
-print("filter:", flt.apply(str))
-
-str="[2020-01-15T04:07:52.011] [6.8] debug:  [clx-hercules-005:1] [1579054072.011693] [pmixp_dconn.h:228:pmixp_dconn_connect] mpi/pmix:  WIREUP: Connect to 2"
-print("filter:", flt.apply(str))
+ucx_matrix.match()

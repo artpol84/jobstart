@@ -39,6 +39,7 @@ class lFilter:
         f = self.filter_int(fields, obj, fid);
         if ( not (field in self.filters.keys()) ):
             self.filters[field] = []
+        print "lFilter: Append to ", field, " fields = ", fields
         self.filters[field].append(f)
 
 
@@ -54,9 +55,11 @@ class lFilter:
     def apply(self, line):
         pline = self._parse_int(line)
         if  ( float(pline["jobid"]) != self.jobid ) :
+            print "DROP the line ", line
             return 0;
         h = pline[self.hfield]
         if( not (h in self.filters.keys())):
+            print "Drop the line: no filter ", line
             return 0
         flist = self.filters[h]
         for flt in flist:
