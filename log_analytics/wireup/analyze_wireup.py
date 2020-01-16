@@ -33,7 +33,6 @@ def action_dummy(obj, pline):
     print "Action Dummy invoked", obj
     return 0
 
-flt = lf.lFilter(6.8, regex, fdescr, "function")
 
 class message:
     def __init__(self):
@@ -229,7 +228,6 @@ class baseFilter:
                 return 1
         return 0
 
-bf = baseFilter(flt)
 
 # Database
 
@@ -268,18 +266,25 @@ class ucxFilter:
             return 1
         return 0
 
-uf = ucxFilter(flt)
 
 # Read input data
-assert( len(sys.argv) == 2), "Need directory name"
-path = sys.argv[1]
+assert( len(sys.argv) == 3), "Need directory name"
 
-root, dnames, fnames = os.walk(path):
+jobid = float(sys.argv[1])
+path = sys.argv[2]
+
+for root, dnames, fnames in os.walk(path):
+    break
+print "fnames = ", fnames
+
+flt = lf.lFilter(jobid, regex, fdescr, "function")
+uf = ucxFilter(flt)
+bf = baseFilter(flt)
 
 data = []
 # Read file
 for fname in fnames:
-    with open(fname, 'r') as f:
+    with open(root + "/" + fname, 'r') as f:
         text = f.readlines()
     f.close()
     for l in text:

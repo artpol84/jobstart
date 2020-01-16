@@ -14,6 +14,7 @@ class lFilter:
 
     def __init__(self, jobid, regex, fdescr, hfield):
         self.jobid = jobid
+        print "JOBID = ", jobid
         self.filters = { }
         self.template = re.compile(regex)
         self.template.match("test")
@@ -45,15 +46,18 @@ class lFilter:
 
     def _parse_int(self, line):
         m = self.template.match(line)
-        pline = {}
         if( m != None ):
+            pline = {}
             for field in self.fdescr.keys():
                 pline[field] = m.group(self.fdescr[field])
-        return pline
-
+            return pline
+        else:
+            return None
 
     def apply(self, line):
         pline = self._parse_int(line)
+        if (pline == None):
+            return 0
         if  ( float(pline["jobid"]) != self.jobid ) :
             print "DROP the line ", line
             return 0;
