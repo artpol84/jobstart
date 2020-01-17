@@ -1,4 +1,7 @@
 #!/usr/bin/python
+# Copyright (c) 2020      Mellanox Technologies, Inc.
+#                         All rights reserved. *
+
 
 import re
 import os
