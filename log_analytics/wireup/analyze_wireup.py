@@ -1,16 +1,18 @@
 #!/usr/bin/python
 # Copyright (c) 2020      Mellanox Technologies, Inc.
-#                         All rights reserved. *
+#                         All rights reserved.
 
-
-import datetime
+#Standard modules
 import re
-import lFilter as lf
 import os
 import sys
+import matplotlib.pyplot as plt
+import numpy as np
 
-# Database structures
-
+# Local modules
+import lFilter as lf
+import clusterResources as cr
+import channelMatrix as cm
 
 # Regex to filter related lines
 # Example:
@@ -26,131 +28,8 @@ fdescr["line"] = 6
 fdescr["function"] = 7
 fdescr["logline"] = 8
 
-def body_all(obj, body):
-    return 1
-
-def body_strstr(obj, body):
-    return ( body.find(obj) != -1 )
-
-def action_dummy(obj, pline):
-    print "Action Dummy invoked", obj
-    return 0
-
-
-class message:
-    def __init__(self):
-        self._size = 0
-        self._mid = -1
-        self.ts = { }
-
-    def set_size(self, size):
-        self._size = size
-    def size(self):
-        return self._size
-
-    def set_mid(self, mid):
-        self._mid = mid
-    def mid(self):
-        return self._mid
-
-    def in_state(self, side, state):
-        if( not (side in self.ts.keys())):
-            self.ts[side] = { }
-        return (state in self.ts[side].keys())
-
-    def dump_states(self, side):
-        states = ""
-        if( not (side in self.ts.keys())):
-            self.ts[side] = { }
-        for state in self.ts[side].keys():
-            states += state + ", "
-        return states
-
-    def set_ts(self, side, state, ts):
-        assert (not self.in_state(side, state)), "ERROR: Double message state initialization"
-        self.ts[side][state] = ts
-
-class channel:
-    def __init__(self):
-        self.ch = { }
-        self.ch["send"] = { }
-        self.ch["recv"] = { }
-        self.fifo = { }
-        self.fifo["send"] = []
-        self.fifo["recv"] = []
-
-    def update(self, side, mid, mtype, size, ts):
-        if( not (mid in self.ch[side].keys())):
-            msg = message()
-            msg.set_size(size)
-            msg.set_mid(mid)
-            self.ch[side][mid] = msg
-            self.fifo[side].append(msg)
-        msg = self.ch[side][mid]
-        assert (self.ch[side][mid].size() == size), "Message size mismatch"
-        msg.set_ts(side, mtype, ts)
-
-    def match(self):
-        l = min(len(self.fifo["send"]), len(self.fifo["recv"]))
-        for i in xrange(0, l):
-            print "Match message #", i
-            smsg = self.fifo["send"][i]
-            rmsg = self.fifo["recv"][i]
-            if (smsg.size() != rmsg.size()):
-                ret = "Matching ERROR: message #" + str(i) + ": size: send=" + str(smsg.size()) + " recv=" + str(rmsg.size())
-                return ret
-            if (not smsg.in_state("send", "completed")):
-                ret = "Matching ERROR: message #" + str(i) + ": send is not completed: " + smsg.dump_states("send")
-                return ret
-            if (not rmsg.in_state("recv", "completed")):
-                ret = "Matching ERROR: message #" + str(i) + ": recv is not completed: " + rmsg.dump_states("recv")
-                return ret
-        if ( len(self.fifo["send"]) != len(self.fifo["recv"]) ):
-            ret = "Matching ERROR: mismatch in # of send and recv messages: send=" + str( len(self.fifo["send"]) ) + " recv=" + str( len(self.fifo["recv"]) )
-            return ret
-        return None
-
-
-class channelMatrix:
-    def __init__(self):
-        self.matrix = { }
-    def update(self, src, dst, side, mtype, mid, size, ts):
-        if( not (src in self.matrix.keys())):
-            self.matrix[src] = { }
-        if( not (dst in self.matrix[src].keys())):
-            self.matrix[src][dst] = channel()
-        self.matrix[src][dst].update(side, mid, mtype, size, ts)
-
-    def match(self):
-        print "src keys: ", self.matrix.keys()
-        for src in self.matrix.keys():
-            print "dst keys: ", self.matrix[src].keys()
-            for dst in self.matrix[src].keys():
-                print "src = ", src, " dst = ", dst
-                err = self.matrix[src][dst].match()
-                if( err != None):
-                    print "(", str(src) + ",", str(dst), "): ", err
-
-    def analysis(self):
-        # Verify message send/recv matching
-        self.match()
-
-wireup_matrix = channelMatrix()
-ucx_matrix = channelMatrix()
-
-class clusterNode:
-    def __init__(self, nodeid):
-        self.nodeid = nodeid
-        self.hostname = ""
-        self.progress = { }
-        self.wireup = channel()
-        self.ucxcomm = channel()
-
-nodeList = { }
-def getNode(nodeid):
-    if( not (nodeid in nodeList.keys())):
-        nodeList[nodeid] = clusterNode(nodeid)
-    return nodeList[nodeid]
+wireup_matrix = cr.channelMatrix()
+ucx_matrix = cr.channelMatrix()
 
 class baseFilter:
     PSTART = 1
@@ -188,7 +67,7 @@ class baseFilter:
         print "pline = ", pline["nodeid"]
         nodeid = int(pline["nodeid"])
         n = getNode(nodeid)
-        ts = float(pline["timestamp"])
+        ts = gt.global_ts(nodeid, float(pline["timestamp"]))
         if (fid == self.PSTART):
             print "Set the start time for nodeid = ", nodeid
             n.progress["start"] = ts
@@ -225,7 +104,7 @@ class baseFilter:
             m = t.match(pline["logline"])
             if( m != None ):
                 src = m.group(1)
-                msg = message()
+                msg = cr.message()
                 self.recv_msg_id += 1
                 wireup_matrix.update(src, nodeid, "recv", "completed", self.recv_msg_id, 0, ts)
                 return 1
@@ -247,7 +126,7 @@ class ucxFilter:
     def bfilter(self, pline, fid):
         nodeid = int(pline["nodeid"])
         n = getNode(nodeid)
-        ts = float(pline["timestamp"])
+        ts = gt.global_ts(nodeid, float(pline["timestamp"]))
         regex_tmp = ".*UCX:\s*(\S+)\s*\[(\S+)\]\s*nodeid=(\d+),\s*mid=(\d+),\s*size=(\d+)"
         t = re.compile(regex_tmp)
         m = t.match(pline["logline"])
@@ -278,6 +157,16 @@ path = sys.argv[2]
 
 for root, dnames, fnames in os.walk(path):
     break
+
+# 1. If mpisync data is available - initialize it
+mpisync_file = "mpisync.out"
+gt = cr.globalTime()
+if mpisync_file in fnames:
+    print "Initialize Global Timings"
+    gt.load(root + "/" + mpisync_file)
+
+for root, dnames, fnames in os.walk(path):
+    break
 print "fnames = ", fnames
 
 flt = lf.lFilter(jobid, regex, fdescr, "function")
@@ -294,3 +183,13 @@ for fname in fnames:
         flt.apply(l)
 
 ucx_matrix.match()
+print ucx_materix.comm_time()
+
+x = ucx_matric.comm_lat()
+x = np.array([1, 2, 3, 4, 5])
+y = np.power(x, 2) # Effectively y = x**2
+e = np.array([1.5, 2.6, 3.7, 4.6, 5.5])
+
+plt.errorbar(x["stat"]["size"], x["stat"]["mean"], x["stat"]["stdev"], linestyle='solid', marker='^')
+
+plt.show()
