@@ -3,10 +3,10 @@
 import statistics as stat
 
 class message:
-    def __init__(self, type):
+    def __init__(self):
         self._size = 0
         self._mid = -1
-        self.ts = { }
+        self._ts = { }
 
     def set_size(self, size):
         self._size = size
@@ -19,7 +19,7 @@ class message:
         return self._mid
 
     def in_state(self, state):
-        return (state in self.ts.keys())
+        return (state in self._ts.keys())
 
     def dump_states(self):
         states = ""
@@ -29,10 +29,12 @@ class message:
 
     def set_ts(self, state, ts):
         assert (not self.in_state(state)), "ERROR: Double message state initialization"
-        self.ts[state] = ts
+        self._ts[state] = ts
 
     def ts(self, state):
-        return self.ts[state]
+        if( not state in self._ts.keys()):
+            return None
+        return self._ts[state]
 
 class channel:
     SEND = 1
@@ -46,8 +48,13 @@ class channel:
         self.fifo[self.SEND] = []
         self.fifo[self.RECV] = []
 
+    def get_ts(self, side, mid, mtype):
+        if( not (mid in self.ch[side].keys())):
+            return None
+        msg = self.ch[side][mid]
+        return msg.ts(mtype)
 
-    def update(self, side_str, mid, mtype, size, ts):
+    def update(self, side, mid, mtype, size, ts):
         if( not (mid in self.ch[side].keys())):
             msg = message()
             msg.set_size(size)
@@ -59,7 +66,7 @@ class channel:
         msg.set_ts(mtype, ts)
 
     def match(self):
-        l = min(len(self.fifo[self.]), len(self.fifo["recv"]))
+        l = min(len(self.fifo[self.SEND]), len(self.fifo[self.RECV]))
         for i in xrange(0, l):
             # Debug output
             # print "Match message #", i
@@ -85,8 +92,16 @@ class channel:
         for i in xrange(0, l):
             smsg = self.fifo[self.SEND][i]
             rmsg = self.fifo[self.RECV][i]
-            time += rmsg.ts(end.state) - smsg.ts(start.state)
+            time += rmsg.ts(end_state) - smsg.ts(start_state)
         return time
+
+    def comm_size(self):
+        l = len(self.fifo[self.SEND])
+        size = 0.0
+        for i in xrange(0, l):
+            smsg = self.fifo[self.SEND][i]
+            size += smsg.size()
+        return size
 
     def latencies(self, start_state, end_state):
         l = len(self.fifo[self.SEND])
@@ -94,7 +109,7 @@ class channel:
         for i in xrange(0, l):
             smsg = self.fifo[self.SEND][i]
             rmsg = self.fifo[self.RECV][i]
-            lat.append({ "size" : rmsg.size(), "lat" : (rmsg.ts(end.state) - smsg.ts(start.state))])
+            lat.append({ "size" : rmsg.size(), "lat" : (rmsg.ts(end_state) - smsg.ts(start_state))})
         return lat
 
 
@@ -105,13 +120,24 @@ class channelMatrix:
         self.sides[send_side_name] = channel.SEND
         self.sides[recv_side_name] = channel.RECV
 
+    def get_ts(self, src, dst, side_str, mtype, mid):
+        assert (side_str in self.sides.keys()), "[channel]: Unknown side name \"" + side_str + "\""
+        side = self.sides[side_str]
+        if( not (src in self.matrix.keys())):
+            return None
+        if( not (dst in self.matrix[src].keys())):
+            return None
+        return self.matrix[src][dst].get_ts(side, mid, mtype)
+
+
     def update(self, src, dst, side_str, mtype, mid, size, ts):
-        assert (side_str in self.side)), "[channel]: Unknown side name \"", side_str, "\""
+        assert (side_str in self.sides.keys()), "[channel]: Unknown side name \"" + side_str + "\""
         side = self.sides[side_str]
         if( not (src in self.matrix.keys())):
             self.matrix[src] = { }
         if( not (dst in self.matrix[src].keys())):
             self.matrix[src][dst] = channel()
+        print "Update (", src, ",", dst, "): size = ", size
         self.matrix[src][dst].update(side, mid, mtype, size, ts)
 
     def match(self):
@@ -119,43 +145,71 @@ class channelMatrix:
             for dst in self.matrix[src].keys():
                 err = self.matrix[src][dst].match()
                 if( err != None):
-                    src_node = 
+                    # TODO: output using hostnames
                     print "(", str(src) + ",", str(dst), "): ", err
 
     def comm_time(self, sender_state, receiver_state):
-        output = [None] * len(self.matrix.keys())
+        # Identify the max channel index
+        last_idx = max(self.matrix.keys())
         for src in self.matrix.keys():
-            output[src] = [None] * len(self.matrix[src].keys())
+            tmp = max(self.matrix[src].keys())
+            last_idx = max(last_idx, src)
+
+        # Create a matrix of all channels
+        nchannels = last_idx + 1
+        ctime = [0] * nchannels
+        csize = [0] * nchannels
+        for idx in xrange(0, nchannels):
+            ctime[idx] = [-1] * nchannels
+            csize[idx] = [-1] * nchannels
+
+        # Build the matrix
+        maxv = 0
+        print "Ouptut x size = ", len(self.matrix.keys())
+        for src in self.matrix.keys():
+            print "Ouptut y size = ", len(self.matrix[src].keys())
             for dst in self.matrix[src].keys():
-                ctime = self.matrix[src][dst].comm_time(sender_state, receiver_state)
-                output[src][dst] = ctime
-        return output
+                print "ouput[", src, "][", dst, "]"
+                ctime[src][dst] = self.matrix[src][dst].comm_time(sender_state, receiver_state)
+                csize[src][dst] = self.matrix[src][dst].comm_size()
+                if( maxv < ctime[src][dst]):
+                    maxv = ctime[src][dst]
+
+        for src in xrange(0, nchannels):
+            for dst in xrange(0, nchannels):
+                if ( ctime[src][dst] < 0 ):
+                    ctime[src][dst] = -maxv
+        return ctime, csize
 
     def comm_lat(self, sender_state, receiver_state):
         output = { }
+        output["data"] = { }
         for src in self.matrix.keys():
             output[src] = [None] * len(self.matrix[src].keys())
             for dst in self.matrix[src].keys():
                 latencies = self.matrix[src][dst].latencies(sender_state, receiver_state)
                 for l in latencies:
                     size = l["size"]
-                    if( not (size in output.keys())):
+                    if( not (size in output["data"].keys())):
                         output["data"][size] = [ ]
                     x = {"src" : src, "dst" : dst, "lat" : l["lat"] }
                     output["data"][size].append(x)
 
         output["stat"] = { }
-        output["stat"]["size"] = [None] * len(output.keys())
-        output["stat"]["mean"] = [None] * len(output.keys())
-        output["stat"]["stdev"] = [None] * len(output.keys())
+        output["stat"]["size"] = [None] * len(output["data"].keys())
+        output["stat"]["mean"] = [None] * len(output["data"].keys())
+        output["stat"]["stdev"] = [None] * len(output["data"].keys())
         idx = 0
-        for size in output.keys():
+        for size in output["data"].keys():
             values = []
-            for l in output[size]["data"]:
+            for l in output["data"][size]:
                 values.append(l["lat"])
-            output["stat"][idx]["size"] = size
-            output["stat"][idx]["mean"] = stat.mean(values)
-            output["stat"][idx]["stdev"] = stat.stdev(values, output["stat"][idx]["mean"])
+            output["stat"]["size"][idx] = size
+            output["stat"]["mean"][idx] = stat.mean(values)
+            if( len(values) > 1):
+                output["stat"]["stdev"][idx] = stat.stdev(values, output["stat"]["mean"][idx])
+            else:
+                output["stat"]["stdev"][idx] = values[0]
             idx += 1
 
         return output

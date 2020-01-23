@@ -62,11 +62,10 @@ class lFilter:
         if (pline == None):
             return 0
         if  ( float(pline["jobid"]) != self.jobid ) :
-            print "DROP the line ", line
             return 0;
         h = pline[self.hfield]
         if( not (h in self.filters.keys())):
-            print "Drop the line: no filter ", line
+#            print "Drop the line: no filter ", line
             return 0
         flist = self.filters[h]
         for flt in flist:
@@ -74,6 +73,7 @@ class lFilter:
             for field in flt.fields.keys():
                 ret += (pline[field] != flt.fields[field] );
             if( not ret ):
-                if( flt.obj.bfilter(pline, flt.fid) ):
+                print line
+                if( flt.obj.lfilter(pline, flt.fid) ):
                     return 1
         return 0

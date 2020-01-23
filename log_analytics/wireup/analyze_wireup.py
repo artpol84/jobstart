@@ -6,190 +6,182 @@
 import re
 import os
 import sys
+import argparse
+import pickle
+import inspect
 import matplotlib.pyplot as plt
 import numpy as np
+from copy import deepcopy
+import seaborn as sns
 
 # Local modules
 import lFilter as lf
 import clusterResources as cr
 import channelMatrix as cm
-
-# Regex to filter related lines
-# Example:
-# [2020-01-15T04:07:51.707] [6.8] debug:  [(null):0] [1579054071.707138] [mpi_pmix.c:153:p_mpi_hook_slurmstepd_prefork] mpi/pmix:  start
-regex = "^\[\S+\] \[(\S+)\]\s*debug:\s*\[(\S+):(\d+)\]\s*\[(\S+)]\s*\[(\S+):(\d+):(\S+)\]\s*mpi/pmix:\s(.*)"
-fdescr = {}
-fdescr["jobid"] = 1
-fdescr["hostname"] = 2
-fdescr["nodeid"] = 3
-fdescr["timestamp"] = 4
-fdescr["file"] = 5
-fdescr["line"] = 6
-fdescr["function"] = 7
-fdescr["logline"] = 8
-
-wireup_matrix = cr.channelMatrix()
-ucx_matrix = cr.channelMatrix()
-
-class baseFilter:
-    PSTART = 1
-    HOSTNAME=2
-    EARLY_WIREUP_START = 3
-    EARLY_WIREUP_THREAD = 4
-    WIREUP_CONNECTED = 5
-
-    def __init__(self, flt):
-        self.send_msg_id = 0
-        self.recv_msg_id = 0
-
-        # Plugin startup time
-        fields = { "function" : "p_mpi_hook_slurmstepd_prefork" }
-        flt.add(fields, self, self.PSTART);
-
-        # Set the hostname for the nodeid
-        fields = { "function" : "_agent_thread" }
-        flt.add(fields, self, self.HOSTNAME);
-
-        # Record Early Wireup start
-        fields = { "function" : "pmixp_server_wireup_early" }
-        flt.add(fields, self, self.EARLY_WIREUP_START);
-
-        # Record Early Wireup thread
-        fields = { "function" : "_wireup_thread" }
-        flt.add(fields, self, self.EARLY_WIREUP_THREAD);
-
-        # Record Early Wireup thread
-        fields = { "function" : "pmixp_dconn_connect" }
-        flt.add(fields, self, self.WIREUP_CONNECTED);
+import globalTime as gt
+import filterSPMIx as spmix
+import filterUCX as ucx
 
 
-    def bfilter(self, pline, fid):
-        print "pline = ", pline["nodeid"]
-        nodeid = int(pline["nodeid"])
-        n = getNode(nodeid)
-        ts = gt.global_ts(nodeid, float(pline["timestamp"]))
-        if (fid == self.PSTART):
-            print "Set the start time for nodeid = ", nodeid
-            n.progress["start"] = ts
-            return 1
+class globalState:
+    def __init__(self):
+        self.set = None
+        self.cluster = None
+        self.sync = None
+        self.wireup_mtx = None
+        self.ucx_mtx = None
 
-        if ( fid == self.HOSTNAME ):
-            if( pline["logline"].find("Start agent thread") != -1 ):
-                print "Set the hostname of nodeid=", nodeid, " to ", pline["hostname"]
-                n.hostname = pline["hostname"]
-                return 1
+state = globalState()
 
-        if ( fid == self.EARLY_WIREUP_START ):
-            if( pline["logline"].find("WIREUP/early: start") != -1 ):
-                print "Record early wireup beginning on nodeid=", nodeid
-                n.progress["ewp_start"] = ts
-                return 1
+def parse_args():
+    global state
 
-        if ( fid == self.EARLY_WIREUP_THREAD ):
-            if( pline["logline"].find("WIREUP/early: complete") != -1 ):
-                print "Record early wireup finishing on nodeid=", nodeid
-                n.progress["ewp_done"] = ts
-                return 1
-            elif( pline["logline"].find("WIREUP/early: sending initiation message to nodeids:") != -1 ):
-                l1 = pline["logline"].split(":")
-                l2 = l1[2].strip().split(" ")
-                for dst in l2:
-                    self.send_msg_id += 1
-                    wireup_matrix.update(nodeid, dst, "send", "completed", self.send_msg_id, 0, ts)
-                return 1
+    parser = argparse.ArgumentParser(description='Slurm PMIx plugin analytics tool')
+    parser.add_argument('-p', '--parse', metavar='dataset', dest='parse_path', help="Parse the dataset located by provided 'dataset' path to the 'analytics-file'")
+# TODO: need this in final version
+#    parser.add_argument('-g', '--debug', metavar='dataset', dest='debug_path', help="interpret 'dataset' as a directory of Slurmd logs, perform correctness analysis only")
+    parser.add_argument('-d', '--display', metavar='mode', dest='display_mode', help="Set display mode: 'latency', 'heatmap-bw', 'heatmap-time'.")
+    parser.add_argument('-j', '--jobid', metavar='ID', dest='jobid', type=float, help="Specify the Slurm Job ID")
+# TODO: need this in final version
+#    parser.add_argument('data_file', metavar='analytics_file', help="The file with parsed dataset")
+    state.set = parser.parse_args()
+    has_parse = (state.set.parse_path != None)
+#    has_debug = (s.debug_path != None)
+    has_display = (state.set.display_mode != None)
 
-        if ( fid == self.WIREUP_CONNECTED ):
-            regex_tmp = "\s*WIREUP: Connect to (\d+).*"
-            t = re.compile(regex_tmp)
-            m = t.match(pline["logline"])
-            if( m != None ):
-                src = m.group(1)
-                msg = cr.message()
-                self.recv_msg_id += 1
-                wireup_matrix.update(src, nodeid, "recv", "completed", self.recv_msg_id, 0, ts)
-                return 1
-        return 0
+    if( 2 != (has_display + has_parse)) :
+        print "parse_args(ERROR): Need parse path and display mode"
+        sys.exit(1)
+        
+#    if( 0 == (has_parse + has_debug + has_display)) :
+#        print "parse_args(ERROR): One (and only one) of the following options is required: '--parse', '--debug' and '--display'"
+#        sys.exit(1)
+#    if( 1 < (has_parse + has_debug + has_display)) :
+#        print "parse_args(ERROR): Two or more confliction options '--parse', '--debug' and '--display' were specified together"
+#        sys.exit(1)
+#
+    if( has_parse and (not os.path.isdir(state.set.parse_path))):
+        print "parse_args(ERROR): '--parse' directory doesn't exists: ", s.parse_path
+        sys.exit(1)
+#    if( has_debug and (not os.path.isdir(s.debug_path))):
+#        print "parse_args(ERROR): '--debug' directory doesn't exists: ", s.debug_path
+#        sys.exit(1)
+#    if( has_display and (not os.path.exists(state.set.data_file))):
+#        print "parse_args(ERROR): 'analytics_file' doesn't exists: ", s.data_file
+#        sys.exit(1)
+
+
+def parse_slurmd_logs(flt, path):
+    if( not os.path.isdir(path)):
+        print "parse_slurmd_logs(ERROR): '--parse' directory doesn't exists: ", s.parse_path
+        sys.exit(1)
+
+    data = []
+    # Read file
+    for root, dnames, fnames in os.walk(path, True):
+        break
+    for fname in fnames:
+        with open(path +"/" + fname, 'r') as f:
+            text = f.readlines()
+        f.close()
+        for l in text:
+            flt.apply(l)
+
+def parse_dataset():
+    path = state.set.parse_path
+    jobid = state.set.jobid
+
+    if( None == jobid ):
+        # TODO: extract the jobid from the files
+        print "ERROR: Slurm Job ID is required: ", mpisync_path
+        sys.exit(1)
+        
+    # 1. If mpisync data is available - initialize it
+    print "Initialize Global Time"
+    mpisync_file = "mpisync.out"
+    mpisync_path = path + "/" + mpisync_file
+    if( not os.path.exists(mpisync_path)):
+        print "ERROR: No Time synchronization file (aka mpisync): ", mpisync_path
+        sys.exit(1)
+    state.sync = gt.globalTime()
+    state.sync.load(mpisync_path)
+
+    # 2. Initialize data objects
+    state.wireup_mtx = cm.channelMatrix("send", "recv")
+    state.ucx_mtx = cm.channelMatrix("send", "recv")
+    state.cluster = cr.clusterSystem()
+
+    # 3. Initialize The Line filter framework and custom filters
+    print "Initialize The Line filter framework and custom filters"
+    # Regex to filter related lines
+    # Example:
+    # [2020-01-15T04:07:51.707] [6.8] debug:  [(null):0] [1579054071.707138] [mpi_pmix.c:153:p_mpi_hook_slurmstepd_prefork] mpi/pmix:  start
+    regex = "^\[\S+\] \[(\S+)\]\s*debug:\s*\[(\S+):(\d+)\]\s*\[(\S+)]\s*\[(\S+):(\d+):(\S+)\]\s*mpi/pmix:\s(.*)"
+    fdescr = {}
+    fdescr["jobid"] = 1
+    fdescr["hostname"] = 2
+    fdescr["nodeid"] = 3
+    fdescr["timestamp"] = 4
+    fdescr["file"] = 5
+    fdescr["line"] = 6
+    fdescr["function"] = 7
+    fdescr["logline"] = 8
+
+    flt = lf.lFilter(jobid, regex, fdescr, "function")
+    uf = ucx.filterUCX(flt, state.cluster, state.ucx_mtx, state.sync)
+    bf = spmix.filterSPMIx(flt, state.cluster, state.wireup_mtx, state.sync)
+
+    parse_slurmd_logs(flt, path + "/slurm_logs/")
+#    state.wireup_mtx.match()
+    state.ucx_mtx.match()
+
+def display_msg_lat(ch_matrix):
+    x = ch_matrix.comm_lat("enqueued", "completed")
+    fig, ax = plt.subplots()
+    ax.set_xlabel('Message size (B)')
+    ax.set_ylabel('Latency (s)')
+    plt.yscale('log')
+    ax.tick_params(labelbottom=True, labeltop=True, labelleft=True, labelright=True,
+                   bottom=True, top=True, left=True, right=True)
+    plt.rcParams.update({'errorbar.capsize': 2})
+
+    print "X = ", x["data"].keys()
+
+    plt.errorbar(x["stat"]["size"], x["stat"]["mean"], x["stat"]["stdev"],  linestyle='None', marker='.')
+    plt.show()
+
+
 
 
 # Database
 
-class ucxFilter:
-    def __init__(self, flt):
-        # Plugin startup time
-        fields = { "function" : "_ucx_send" }
-        flt.add(fields, self, 1)
-        fields = { "function" : "send_handle" }
-        flt.add(fields, self, 1)
-        fields = { "function" : "_ucx_progress" }
-        flt.add(fields, self, 1)
 
-    def bfilter(self, pline, fid):
-        nodeid = int(pline["nodeid"])
-        n = getNode(nodeid)
-        ts = gt.global_ts(nodeid, float(pline["timestamp"]))
-        regex_tmp = ".*UCX:\s*(\S+)\s*\[(\S+)\]\s*nodeid=(\d+),\s*mid=(\d+),\s*size=(\d+)"
-        t = re.compile(regex_tmp)
-        m = t.match(pline["logline"])
-        if( m != None ):
-            side = m.group(1)
-            mtype = m.group(2)
-            peer = int(m.group(3))
-            mid = int(m.group(4))
-            size = int(m.group(5))
-            if (side == "send"):
-                src = nodeid
-                dst = peer
-            elif (side == "recv"):
-                src = peer
-                dst = nodeid
-            else:
-                assert (False), ("Unsupported UCX operation type: " + side + "; Only 'recv' and 'send' are supported")
-            ucx_matrix.update(src, dst, side, mtype, mid, size, ts)
-            return 1
-        return 0
+settings = parse_args()
 
+#if( state.set.parse_path != None ):
+#    parse_dataset()
+#    serialize()
+#elif ( state.set.debug_path != None ):
+#    debug_dataset()
+#    serialize()
+#elif ( state.set.display_mode != None):
+if ( state.set.display_mode != None):
+    parse_dataset()
+    if( "latency" == state.set.display_mode ):
+        display_msg_lat(state.ucx_mtx)
+    elif ("heatmap-bw" ==  state.set.display_mode):
+        ctime, csize = state.ucx_mtx.comm_time("pending", "completed")
 
-# Read input data
-assert( len(sys.argv) == 3), "Need directory name"
-
-jobid = float(sys.argv[1])
-path = sys.argv[2]
-
-for root, dnames, fnames in os.walk(path):
-    break
-
-# 1. If mpisync data is available - initialize it
-mpisync_file = "mpisync.out"
-gt = cr.globalTime()
-if mpisync_file in fnames:
-    print "Initialize Global Timings"
-    gt.load(root + "/" + mpisync_file)
-
-for root, dnames, fnames in os.walk(path):
-    break
-print "fnames = ", fnames
-
-flt = lf.lFilter(jobid, regex, fdescr, "function")
-uf = ucxFilter(flt)
-bf = baseFilter(flt)
-
-data = []
-# Read file
-for fname in fnames:
-    with open(root + "/" + fname, 'r') as f:
-        text = f.readlines()
-    f.close()
-    for l in text:
-        flt.apply(l)
-
-ucx_matrix.match()
-print ucx_materix.comm_time()
-
-x = ucx_matric.comm_lat()
-x = np.array([1, 2, 3, 4, 5])
-y = np.power(x, 2) # Effectively y = x**2
-e = np.array([1.5, 2.6, 3.7, 4.6, 5.5])
-
-plt.errorbar(x["stat"]["size"], x["stat"]["mean"], x["stat"]["stdev"], linestyle='solid', marker='^')
-
-plt.show()
+        cbw = deepcopy(csize)
+        for src in xrange(0, len(ctime)):
+            for dst in xrange(0, len(ctime[src])):
+                if( 0 != cbw[src][dst]):
+                    cbw[src][dst] = cbw[src][dst] / ctime[src][dst]
+        sns.heatmap(cbw, cmap="YlGnBu")
+        plt.show()
+    elif ("heatmap-tm" ==  state.set.display_mode):
+        ctime, csize = state.ucx_mtx.comm_time("pending", "completed")
+        # Draw the heatmap with the mask and correct aspect ratio
+        print ctime
+        sns.heatmap(ctime, cmap="YlGnBu")
+        plt.show()
