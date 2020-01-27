@@ -30,8 +30,8 @@ class globalTime:
         if( not nodeid in self.by_id.keys()):
             error = "global_ts: Unknown nodeid=" + str(nodeid)
             assert ( nodeid != None ), error
-            print "host = ", hostname, ", val = ", self.by_host[hostname]
+#            print "host = ", hostname, ", val = ", self.by_host[hostname]
             self.by_id[nodeid] = self.by_host[hostname]
-        print("nodeid=%d, hostname=%s, offset=%.6f, local_ts=%.6f, ts=%.6f\n" % 
-                (nodeid, hostname, self.by_id[nodeid], local_ts, local_ts + self.by_id[nodeid]))
+#        print("nodeid=%d, hostname=%s, offset=%.6f, local_ts=%.6f, ts=%.6f\n" % 
+#                (nodeid, hostname, self.by_id[nodeid], local_ts, local_ts + self.by_id[nodeid]))
         return local_ts + self.by_id[nodeid]

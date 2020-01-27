@@ -1,5 +1,12 @@
 #!/usr/bin/python
 
+import sys
+import os
+import argparse
+import json
+import inspect
+import re
+
 # Cluster resources
 #import clusterResources as cr
 
@@ -16,8 +23,31 @@
 #print "Ts=", ts, " cn0 = ", gt.global_ts(0, ts), " cn1 = ", gt.global_ts(1, ts)
 
 
-import numpy as np; 
-np.random.seed(0)
-import seaborn as sns; sns.set()
-uniform_data = np.random.rand(10, 12)
-ax = sns.heatmap(uniform_data)
+#import numpy as np; 
+#np.random.seed(0)
+#import seaborn as sns; sns.set()
+#uniform_data = np.random.rand(10, 12)
+#ax = sns.heatmap(uniform_data)
+
+s = ' 0x956ce0: ctx=0x956dc8 contrib/nbr: collseq=3, state=1, nodeid=2, contrib=7, hopseq=3, size=19'
+regex = "\s(0x[0-9a-fA-F]+):\sctx=(0x[0-9a-fA-F]+)\scontrib/nbr:\scollseq=(\d+),\sstate=(\S+),\snodeid=(\d+),\scontrib=(\d+),\shopseq=(\d+),\ssize=(\d+)"
+r = re.compile(regex)
+m = r.match(s)
+print "match = ", m
+
+
+sys.exit()
+
+d = {"Pierre": 42, "Anne": 33, "Zoe": 24}
+
+sorted_d = sorted(d.items(), key = lambda kv : (kv[1], kv[0]))
+print sorted_d
+print sorted_d[0][0]
+
+x = (sorted_d[0][0], sorted_d[0][1])
+print x
+
+
+x = [ (2,4), (1,4), (1, 5) ]
+print sorted(x)
+

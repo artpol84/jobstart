@@ -3,11 +3,10 @@
 import re
 
 class filterSPMIx:
-    PSTART = 1
-    HOSTNAME=2
-    EARLY_WIREUP_START = 3
-    EARLY_WIREUP_THREAD = 4
-    WIREUP_CONNECTED = 5
+    HOSTNAME=1
+    EARLY_WIREUP_START = 2
+    EARLY_WIREUP_THREAD = 3
+    WIREUP_CONNECTED = 4
 
     def __init__(self, flt, cluster, chan, sync):
         self.cl = cluster
@@ -34,29 +33,26 @@ class filterSPMIx:
 
 
     def lfilter(self, pline, fid):
-        print "pline = ", pline
         nodeid = int(pline["nodeid"])
-        n = self.cl.node(nodeid)
         hostname = pline["hostname"]
         ts = self.sync.global_ts(nodeid, hostname, float(pline["timestamp"]))
 
         if ( fid == self.HOSTNAME ):
             if( pline["logline"].find("Start agent thread") != -1 ):
                 print "Set the hostname of nodeid=", nodeid, " to ", pline["hostname"]
-                n.hostname = pline["hostname"]
-                n.progress["start"] = ts
+                n = self.cl.start(nodeid, hostname, ts)
                 return 1
 
         if ( fid == self.EARLY_WIREUP_START ):
             if( pline["logline"].find("WIREUP/early: start") != -1 ):
                 print "Record early wireup beginning on nodeid=", nodeid
-                n.progress["ewp_start"] = ts
+                n = self.cl.wireup_start(nodeid, ts)
                 return 1
 
         if ( fid == self.EARLY_WIREUP_THREAD ):
             if( pline["logline"].find("WIREUP/early: complete") != -1 ):
                 print "Record early wireup finishing on nodeid=", nodeid
-                n.progress["ewp_done"] = ts
+                n = self.cl.wireup_init(nodeid, ts)
                 return 1
             elif( pline["logline"].find("WIREUP/early: sending initiation message to nodeids:") != -1 ):
                 l1 = pline["logline"].split(":")

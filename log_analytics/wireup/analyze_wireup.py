@@ -19,8 +19,10 @@ import lFilter as lf
 import clusterResources as cr
 import channelMatrix as cm
 import globalTime as gt
-import filterSPMIx as spmix
-import filterUCX as ucx
+import filterSPMIx as fbase
+import filterUCX as fucx
+import filterColl as fcoll
+import collectives as coll
 
 
 class globalState:
@@ -30,6 +32,7 @@ class globalState:
         self.sync = None
         self.wireup_mtx = None
         self.ucx_mtx = None
+        self.coll = None
 
 state = globalState()
 
@@ -40,7 +43,7 @@ def parse_args():
     parser.add_argument('-p', '--parse', metavar='dataset', dest='parse_path', help="Parse the dataset located by provided 'dataset' path to the 'analytics-file'")
 # TODO: need this in final version
 #    parser.add_argument('-g', '--debug', metavar='dataset', dest='debug_path', help="interpret 'dataset' as a directory of Slurmd logs, perform correctness analysis only")
-    parser.add_argument('-d', '--display', metavar='mode', dest='display_mode', help="Set display mode: 'latency', 'heatmap-bw', 'heatmap-time'.")
+    parser.add_argument('-d', '--display', metavar='mode', dest='display_mode', help="Set display mode: 'summary', 'latency', 'heatmap-bw', 'heatmap-time'.")
     parser.add_argument('-j', '--jobid', metavar='ID', dest='jobid', type=float, help="Specify the Slurm Job ID")
 # TODO: need this in final version
 #    parser.add_argument('data_file', metavar='analytics_file', help="The file with parsed dataset")
@@ -110,6 +113,7 @@ def parse_dataset():
     state.wireup_mtx = cm.channelMatrix("send", "recv")
     state.ucx_mtx = cm.channelMatrix("send", "recv")
     state.cluster = cr.clusterSystem()
+    state.coll = coll.collectives(state.cluster)
 
     # 3. Initialize The Line filter framework and custom filters
     print "Initialize The Line filter framework and custom filters"
@@ -128,8 +132,9 @@ def parse_dataset():
     fdescr["logline"] = 8
 
     flt = lf.lFilter(jobid, regex, fdescr, "function")
-    uf = ucx.filterUCX(flt, state.cluster, state.ucx_mtx, state.sync)
-    bf = spmix.filterSPMIx(flt, state.cluster, state.wireup_mtx, state.sync)
+    uf = fucx.filterUCX(flt, state.cluster, state.ucx_mtx, state.sync)
+    bf = fbase.filterSPMIx(flt, state.cluster, state.wireup_mtx, state.sync)
+    cf = fcoll.filterColl(flt, state.cluster, state.coll, state.sync)
 
     parse_slurmd_logs(flt, path + "/slurm_logs/")
 #    state.wireup_mtx.match()
@@ -150,12 +155,6 @@ def display_msg_lat(ch_matrix):
     plt.errorbar(x["stat"]["size"], x["stat"]["mean"], x["stat"]["stdev"],  linestyle='None', marker='.')
     plt.show()
 
-
-
-
-# Database
-
-
 settings = parse_args()
 
 #if( state.set.parse_path != None ):
@@ -167,7 +166,10 @@ settings = parse_args()
 #elif ( state.set.display_mode != None):
 if ( state.set.display_mode != None):
     parse_dataset()
-    if( "latency" == state.set.display_mode ):
+    if( "summary" == state.set.display_mode ):
+        state.cluster.analyze()
+        state.coll.analyze()
+    elif( "latency" == state.set.display_mode ):
         display_msg_lat(state.ucx_mtx)
     elif ("heatmap-bw" ==  state.set.display_mode):
         ctime, csize = state.ucx_mtx.comm_time("pending", "completed")
@@ -185,3 +187,4 @@ if ( state.set.display_mode != None):
         print ctime
         sns.heatmap(ctime, cmap="YlGnBu")
         plt.show()
+

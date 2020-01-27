@@ -15,11 +15,11 @@ class filterUCX:
         flt.add(fields, self, 1)
 
     def lfilter(self, pline, fid):
-        print pline["logline"]
+#        print pline["logline"]
         nodeid = int(pline["nodeid"])
         n = self.cluster.node(nodeid)
         hostname = pline["hostname"]
-        print pline
+#       print pline
         ts = self.sync.global_ts(nodeid, hostname, float(pline["timestamp"]))
         regex_tmp = ".*UCX:\s*(\S+)\s*\[(\S+)\]\s*nodeid=(\d+),\s*mid=(\d+),\s*size=(\d+)"
         t = re.compile(regex_tmp)
@@ -39,7 +39,7 @@ class filterUCX:
             else:
                 assert (False), ("Unsupported UCX operation type: " + side + "; Only 'recv' and 'send' are supported")
 
-            print ("SEND(%d->%d): local_ts=%.6f, global_ts=%.6f, size=%d\n" % (src, dst, float(pline["timestamp"]), ts, size))
+#            print ("SEND(%d->%d): local_ts=%.6f, global_ts=%.6f, size=%d\n" % (src, dst, float(pline["timestamp"]), ts, size))
 
             self.ch.update(src, dst, side, mtype, mid, size, ts)
             # Ensure that all possible states are covered

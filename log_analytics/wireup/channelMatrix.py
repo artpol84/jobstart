@@ -137,7 +137,7 @@ class channelMatrix:
             self.matrix[src] = { }
         if( not (dst in self.matrix[src].keys())):
             self.matrix[src][dst] = channel()
-        print "Update (", src, ",", dst, "): size = ", size
+#        print "Update (", src, ",", dst, "): size = ", size
         self.matrix[src][dst].update(side, mid, mtype, size, ts)
 
     def match(self):

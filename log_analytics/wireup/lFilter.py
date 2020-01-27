@@ -73,7 +73,7 @@ class lFilter:
             for field in flt.fields.keys():
                 ret += (pline[field] != flt.fields[field] );
             if( not ret ):
-                print line
+#                print line
                 if( flt.obj.lfilter(pline, flt.fid) ):
                     return 1
         return 0
