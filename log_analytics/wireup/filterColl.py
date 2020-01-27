@@ -44,8 +44,7 @@ class filterColl:
 
 
     def lfilter(self, pline, fid):
-        print "COLLECTIVES: pline = ", pline
-        print "COLLECTIVES: fid = ", fid
+#        print "COLLECTIVES: pline = ", pline
         nodeid = int(pline["nodeid"])
         n = self.cl.node(nodeid)
         hostname = pline["hostname"]
@@ -61,7 +60,7 @@ class filterColl:
                 contrib_id = int(m.group(5))
                 size = int(m.group(6))
                 self.coll.update("ring", cseq, contrib_id, size, ts, nodeid)
-                print "COLLECTIVES: Append local contrib: " + pline["logline"]
+#                print "COLLECTIVES: Append local contrib: " + pline["logline"]
                 return 1
 
         if ( fid == self.RING_REMOTE ):
@@ -75,9 +74,8 @@ class filterColl:
                 contrib_id = int(m.group(6))
                 hopseq = int(m.group(7))
                 size = int(m.group(8))
-
                 self.coll.update("ring", cseq, contrib_id, size, ts, nodeid, src)
-                print "COLLECTIVES: Append remote contrib: " + pline["logline"]
+#                print "COLLECTIVES: Append remote contrib: " + pline["logline"]
                 return 1
 
         return 0

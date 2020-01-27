@@ -167,8 +167,9 @@ settings = parse_args()
 if ( state.set.display_mode != None):
     parse_dataset()
     if( "summary" == state.set.display_mode ):
-        state.cluster.analyze()
-        state.coll.analyze()
+        state.cluster.summary()
+        state.coll.summary()
+        state.coll.dump("ring", 0)
     elif( "latency" == state.set.display_mode ):
         display_msg_lat(state.ucx_mtx)
     elif ("heatmap-bw" ==  state.set.display_mode):
