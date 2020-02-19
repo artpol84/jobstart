@@ -64,6 +64,7 @@ function item_download() {
     branch=$5
     commit=$6
     config=$7
+    use_submodules=$8
 
     REPO_SRC=""
     REPO_INST=""
@@ -108,6 +109,11 @@ function item_download() {
             else
                 git clone --progress $giturl $REPO_NAME
             fi
+            if [ -n "$use_submodules" ]; then
+                pushd $SRC_DIR/$REPO_NAME
+                git submodule update --init --recursive
+                popd
+            fi
             if [ "$?" != "0" ]; then
                 echo_error $LINENO "\"$REPO_NAME\" Repository can not be obtained. Cannot continue. "
                 exit 1
@@ -150,6 +156,8 @@ function item_download() {
     cat > $build/config.sh << EOF
 #!/bin/bash
 
+export LD_LIBRARY_PATH="$INSTALL_DIR/hwloc/lib:$INSTALL_DIR/libevent/lib:$INSTALL_DIR/pmix/lib:$INSTALL_DIR/ompi/lib:$LD_LIBRARY_PATH"
+
 $REPO_SRC/configure $config
 EOF
     chmod +x $build/config.sh
@@ -181,26 +189,26 @@ function deploy_item_save_env() {
 
 function deploy_source_prepare() {
     deploy_item_reset_env
-    #             github url                                 prefix         branch      commit      config
-    item_download "hwloc" "$HWLOC_PACK" "$HWLOC_URL" "$HWLOC_INST" "$HWLOC_BRANCH" "$HWLOC_COMMIT" "$HWLOC_CONF"
+    #             github url                                 prefix         branch      commit      config       submodules
+    item_download "hwloc" "$HWLOC_PACK" "$HWLOC_URL" "$HWLOC_INST" "$HWLOC_BRANCH" "$HWLOC_COMMIT" "$HWLOC_CONF" "$HWLOC_USE_SUBMODULES"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "HWLOC"
 
-    item_download "libevent" "$LIBEV_PACK" "$LIBEV_URL" "$LIBEV_INST" "$LIBEV_BRANCH" "$LIBEV_COMMIT" "$LIBEV_CONF"
+    item_download "libevent" "$LIBEV_PACK" "$LIBEV_URL" "$LIBEV_INST" "$LIBEV_BRANCH" "$LIBEV_COMMIT" "$LIBEV_CONF" "$LIBEV_USE_SUBMODULES"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "LIBEV"
 
-    item_download "pmix" "$PMIX_PACK" "$PMIX_URL" "$PMIX_INST" "$PMIX_BRANCH" "$PMIX_COMMIT" "$PMIX_CONF --with-libevent=$LIBEV_INST"
+    item_download "pmix" "$PMIX_PACK" "$PMIX_URL" "$PMIX_INST" "$PMIX_BRANCH" "$PMIX_COMMIT" "$PMIX_CONF --with-libevent=$LIBEV_INST" "$PMIX_USE_SUBMODULES"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "PMIX"
 
-    item_download "ucx" "$UCX_PACK" "$UCX_URL" "$UCX_INST" "$UCX_BRANCH" "$UCX_COMMIT" "$UCX_CONF"
+    item_download "ucx" "$UCX_PACK" "$UCX_URL" "$UCX_INST" "$UCX_BRANCH" "$UCX_COMMIT" "$UCX_CONF" "$PMIX_USE_SUBMODULES"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "UCX"
 
     item_download "slurm" "$SLURM_PACK" "$SLURM_URL" "$SLURM_INST" "$SLURM_BRANCH" "$SLURM_COMMIT" "$SLURM_CONF --with-ucx=$UCX_INST \
- --with-pmix=$PMIX_INST --with-hwloc=$HWLOC_INST --with-munge=$MUNGE_INST"
+ --with-pmix=$PMIX_INST --with-hwloc=$HWLOC_INST --with-munge=$MUNGE_INST" "$SLURM_USE_SUBMODULES"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "SLURM"
     
     item_download "ompi" "$OMPI_PACK" "$OMPI_URL" "$OMPI_INST" "$OMPI_BRANCH" "$OMPI_COMMIT" "$OMPI_CONF \
  --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-pmi=$SLURM_INST \
- --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST --with-hwloc=$HWLOC_INST"
+ --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST --with-hwloc=$HWLOC_INST" "$OMPI_USE_SUBMODULES"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "OMPI"
 }
 
