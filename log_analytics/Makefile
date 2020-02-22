@@ -1,0 +1,14 @@
+# Copyright (c) 2020      Mellanox Technologies, Inc.
+#                         All rights reserved. 
+
+MPICC ?= mpicc
+PMIX_BASE=/tmp/slurm_deploy/pmix
+
+all:
+	make -C litmus_tests MPICC=$(MPICC) PMIX_BASE=$(PMIX_BASE)
+	make -C mpisync MPICC=$(MPICC)
+
+clean:
+	make -C litmus_tests clean
+	make -C mpisync clean
+

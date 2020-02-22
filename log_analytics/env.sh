@@ -1,0 +1,6 @@
+#!/bin/bash
+
+DEPLOY_BASE=/tmp/slurm_deploy
+SLURM_BASE=$DEPLOY_BASE/slurm
+OMPI_BASE=$DEPLOY_BASE/ompi
+PMIX_BASE=$DEPLOY_BASE/pmix
