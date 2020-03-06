@@ -114,7 +114,21 @@ function item_download() {
             fi
         else
             create_dir $SRC_DIR/$REPO_NAME
-            curl -L $packurl | tar -xz -C $SRC_DIR/$REPO_NAME --strip-components 1
+            fname=`basename $packurl`
+            is_gzip=`echo $fname | grep "tar\.gz"`
+            is_bzip=`echo $fname | grep "tar\.bz"`
+            tar_opts=""
+            if [ -n "$is_gzip" ]; then
+                tar_opts="-xz"
+            elif [ -n "$is_bzip" ]; then
+                tar_opts="-xj"
+        	else
+                echo_error $LINENO "\"$REPO_NAME\" Repository can not be obtained: Unknown archive type: $fname, only .gz and .bz2 are supported"
+                rm -rf $SRC_DIR/$REPO_NAME
+                exit 1
+        	fi
+        	echo "tar_opts = $tar_opts"
+            curl -L $packurl | tar $tar_opts -C $SRC_DIR/$REPO_NAME --strip-components 1
             if [ "0" -ne "${PIPESTATUS[0]}" ]; then
                 echo_error $LINENO "\"$REPO_NAME\" Repository can not be obtained. Cannot continue. "
                 rm -rf $SRC_DIR/$REPO_NAME
