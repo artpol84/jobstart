@@ -90,7 +90,7 @@ $ ./run.sh {dtcp|ducx|sapi} [early|noearly] [openib] [timing] -N <nnodes> -n <np
 
 The following set of commands can be used to re-deploy Slurm after the initial allocation was lost:
 ```
-deploy_cmd.sh slurm_stop
+./deploy_cmd.sh slurm_stop
 ./deploy_cmd.sh cleanup_remote
 ./deploy_cmd.sh distribute_all
 ./deploy_cmd.sh slurm_config
