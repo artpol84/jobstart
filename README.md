@@ -87,3 +87,14 @@ $ $SLURMDEP_INST/ompi/bin/oshcc -o hello_oshmem_c -g hello_oshmem_c.c # INSTALL_
 $ cd <rootdir>/jobstart/launch/
 $ ./run.sh {dtcp|ducx|sapi} [early|noearly] [openib] [timing] -N <nnodes> -n <nprocs> <other-slurm-opts> ./hello_oshmem_c
 ```
+
+The following set of commands can be used to re-deploy Slurm after the initial allocation was lost:
+```
+deploy_cmd.sh slurm_stop
+./deploy_cmd.sh cleanup_remote
+./deploy_cmd.sh distribute_all
+./deploy_cmd.sh slurm_config
+./deploy_cmd.sh slurm_start
+```
+
+
