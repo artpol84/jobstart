@@ -26,4 +26,4 @@ function run_one_probe()
 
 BASEDIR=$1
 run_one_probe $BASEDIR/mpi `pwd`/litmus_tests/srun_mpi_probe.sh
-run_one_probe $BASEDIR/pmix `pwd`/litmus_tests/srun_pmix_probe.sh
+run_one_probe $BASEDIR/pmix `pwd`/litmus_tests/srun_pmix_probe.sh 50 $BASEDIR/pmix/app_logs
