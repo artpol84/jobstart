@@ -218,8 +218,7 @@ function deploy_source_prepare() {
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "SLURM"
     
     item_download "ompi" "$OMPI_PACK" "$OMPI_URL" "$OMPI_INST" "$OMPI_BRANCH" "$OMPI_COMMIT" "$OMPI_CONF \
- --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-pmi=$SLURM_INST \
- --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST --with-hwloc=$HWLOC_INST"
+ --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST --with-hwloc=$HWLOC_INST"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "OMPI"
 }
 
