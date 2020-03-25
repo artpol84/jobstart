@@ -98,7 +98,7 @@ function item_download() {
     fi
     cd $SRC_DIR
 
-    echo "\"$REPO_NAME\" repository downloading..."
+    echo "\"$REPO_NAME\" repository obtaining..."
     if [ -d $SRC_DIR/$REPO_NAME ]; then
         echo_error $LINENO "\"$REPO_NAME\" repository already exist, use it. Please delete to download ..."
     else
@@ -128,7 +128,12 @@ function item_download() {
                 exit 1
         	fi
         	echo "tar_opts = $tar_opts"
-            curl -L $packurl | tar $tar_opts -C $SRC_DIR/$REPO_NAME --strip-components 1
+            if [ ${packurl:0:1} = "/" ]; then
+                echo "unpacking \"$REPO_NAME\" from local path..."
+                cat $packurl | tar $tar_opts -C $SRC_DIR/$REPO_NAME --strip-components 1
+            else
+                curl -L $packurl | tar $tar_opts -C $SRC_DIR/$REPO_NAME --strip-components 1
+            fi
             if [ "0" -ne "${PIPESTATUS[0]}" ]; then
                 echo_error $LINENO "\"$REPO_NAME\" Repository can not be obtained. Cannot continue. "
                 rm -rf $SRC_DIR/$REPO_NAME
