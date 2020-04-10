@@ -530,6 +530,10 @@ function slurm_prepare_conf()
         SOCKETS=`pdsh -N -w $compute_node lscpu | grep -i "Socket(s)" | cut -d":" -f2 | tr -d '[:space:]'`
         CONTROL_MACHINE=`hostname`
         CFG_NODE_LIST=`get_node_list`
+        
+        if [ -z "$SLURM_JOB_PARTITION" ]; then
+            SLURM_JOB_PARTITION="deploy"
+        fi
 
         #gnerate a confug file
         cat $FILES/local.conf.in | \
