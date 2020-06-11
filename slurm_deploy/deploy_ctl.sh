@@ -95,9 +95,9 @@ function item_download() {
     else
         if [ -n "$giturl" ]; then
             if [ -n "$branch" ]; then
-                git clone --progress -b "$branch" "$giturl" "$REPO_NAME"
+                git clone --recurse-submodules --progress -b "$branch" "$giturl" "$REPO_NAME"
             else
-                git clone --progress "$giturl" "$REPO_NAME"
+                git clone --recurse-submodules --progress "$giturl" "$REPO_NAME"
             fi
             # shellcheck disable=SC2181
             if [ "$?" != "0" ]; then
