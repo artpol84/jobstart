@@ -116,7 +116,7 @@ function item_download() {
                 tar_opts="-xj"
             else
                 echo_error $LINENO "\"$REPO_NAME\" Repository can not be obtained: Unknown archive type: $fname, only .gz and .bz2 are supported"
-                rm -rf "${SRC_DIR:?}/$REPO_NAME"
+                rm -rf "${SRC_DIR}/$REPO_NAME"
                 exit 1
             fi
             echo "tar_opts = $tar_opts"
