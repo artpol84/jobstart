@@ -130,7 +130,7 @@ function item_download() {
             fi
             if [ "0" -ne "${PIPESTATUS[0]}" ]; then
                 echo_error $LINENO "\"$REPO_NAME\" Repository can not be obtained. Cannot continue. "
-                rm -rf "${SRC_DIR:?}/$REPO_NAME"
+                rm -rf "${SRC_DIR}/$REPO_NAME"
                 exit 1
             fi
         fi
