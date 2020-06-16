@@ -18,7 +18,6 @@ if [ -z "$MUNGE_INST" ]; then
 fi
 
 if [ -f "$DEPLOY_DIR/.deploy_env" ]; then
-    #shellcheck source=.deploy_env
     . "$DEPLOY_DIR/.deploy_env"
 fi
 
@@ -99,7 +98,7 @@ function item_download() {
             else
                 git clone --recurse-submodules --progress "$giturl" "$REPO_NAME"
             fi
-            # shellcheck disable=SC2181
+
             if [ "$?" != "0" ]; then
                 echo_error $LINENO "\"$REPO_NAME\" Repository can not be obtained. Cannot continue. "
                 exit 1
@@ -122,8 +121,6 @@ function item_download() {
             echo "tar_opts = $tar_opts"
             if [ "${packurl:0:1}" = "/" ]; then
                 echo "unpacking \"$REPO_NAME\" from local path..."
-                # TODO
-                # shellcheck disable=SC2002
                 cat "$packurl" | tar $tar_opts -C "$SRC_DIR/$REPO_NAME" --strip-components 1
             else
                 curl -L "$packurl" | tar $tar_opts -C "$SRC_DIR/$REPO_NAME" --strip-components 1
@@ -142,7 +139,6 @@ function item_download() {
         fi
     fi
 
-    # shellcheck disable=SC2181
     if [ "$?" != "0" ]; then
         echo_error $LINENO "\"$REPO_NAME\": Repository can not be prepared. Cannot continue."
         exit 1
@@ -219,7 +215,6 @@ function deploy_source_prepare() {
     item_download "ucx" "$UCX_PACK" "$UCX_URL" "$UCX_INST" "$UCX_BRANCH" "$UCX_COMMIT" "$UCX_CONF"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "UCX"
 
-    # shellcheck disable=SC2153
     item_download "slurm" "$SLURM_PACK" "$SLURM_URL" "$SLURM_INST" "$SLURM_BRANCH" "$SLURM_COMMIT" "$SLURM_CONF --with-ucx=$UCX_INST \
  --with-pmix=$PMIX_INST --with-hwloc=$HWLOC_INST --with-munge=$MUNGE_INST"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "SLURM"
@@ -231,14 +226,11 @@ function deploy_source_prepare() {
 
 function get_item() {
     item_inst=$1
-    # TODO
-    # shellcheck disable=SC2002
     item=$(cat "$DEPLOY_DIR/.deploy_repo.lst" | grep "$item_inst" | awk '{print $1}')
     echo "$item"
 }
 
 function get_repo_item_lst() {
-    # shellcheck disable=SC2002
     repo_items=$(cat "$DEPLOY_DIR/.deploy_repo.lst" | awk '{print $2}')
     echo "$repo_items"
 }
@@ -288,7 +280,6 @@ function deploy_build_item() {
             fi
         fi
 
-        # shellcheck disable=SC2181
         if [ "$?" != "0" ]; then
             echo_error $LINENO "\"$item\" Autogen error. Cannot continue."
             rm configure 2>/dev/null
@@ -300,7 +291,6 @@ function deploy_build_item() {
 
     if [ ! -f "config.log" ]; then
         pdsh -S -w "$build_node" "cd $PWD && LD_LIBRARY_PATH=${HWLOC_INST}/lib:${LIBEV_INST}/lib:${PMIX_INST}/lib:${LD_LIBRARY_PATH} ./config.sh"
-        # shellcheck disable=SC2181
         if [ "$?" != "0" ]; then
             echo_error $LINENO "\"$item\" Configure error. Cannot continue."
             mv config.log config.log.bak
@@ -320,7 +310,6 @@ function deploy_build_item() {
 
     pdsh -S -w "$build_node" "cd $PWD && make -j $build_cpus install"
     ret=$?
-    # shellcheck disable=SC2181
 
     if [ "$?" != "0" ]; then
         echo_error $LINENO "\"$item\" $(make install) error. Cannot continue."
@@ -330,12 +319,6 @@ function deploy_build_item() {
     if [ "$item" = "slurm" ]; then
         pdsh -S -w "$build_node" "cd $PWD/contribs/pmi && make -j $build_cpus install"
         pdsh -S -w "$build_node" "cd $PWD/contribs/pmi2 && make -j $build_cpus install"
-    fi
-
-    if [ "$item" = "ompi" ]; then
-        # TODO: tmp workaround
-        echo "INFO: $SRC_DIR/$item/prrte/src/include/prrte_config.h will be removed"
-        rm -f "$SRC_DIR/$item/prrte/src/include/prrte_config.h"
     fi
 
     cd "$sdir"
@@ -378,7 +361,6 @@ function deploy_build_all() {
 }
 
 function deploy_build_clean() {
-    # TODO
     echo deploy_build_clean
 }
 
@@ -397,7 +379,6 @@ function deploy_slurm_pmix_update() {
     cd "$SRC_DIR/$item/.build/src/plugins/mpi/pmix"
     make -j "$CPU_NUM" clean
     make -j "$CPU_NUM" install
-    # shellcheck disable=SC2045
     for file in $(ls "$SLURM_INST/lib/slurm/mpi_pmix"*); do
         copy_remote_nodes "$nodes" "$file" "$SLURM_INST/lib/slurm/"
     done
@@ -514,7 +495,6 @@ function deploy_slurm_start() {
     if [ -n "$distribute_nodes" ]; then
         first_node=$(scontrol show hostname "$distribute_nodes" | head -n 1) # get first node for run build on it
     fi
-    # shellcheck disable=SC2029
     slurm_ctl_node=$(ssh "$first_node" cat "$SLURM_INST/etc/local.conf" | grep ControlMachine | cut -f2 -d"=")
     exec_remote_as_user_nodes "$slurm_ctl_node" "$SLURM_INST/sbin/slurmctld"
     sleep 3
@@ -564,7 +544,6 @@ function slurm_prepare_conf() {
         fi
 
         #generate a config file
-        # shellcheck disable=SC2002
         cat "$FILES/local.conf.in" |
             sed -e "s/@cluster_name@/deploy/g" |
             sed -e "s/@node_cpus@/$CPUS/g" |
@@ -580,7 +559,6 @@ function slurm_prepare_conf() {
     fi
 
     SLURM_INST_ESC=$(escape_path "$SLURM_INST")
-    # shellcheck disable=SC2002
     cat "$FILES/slurm.conf.in" |
         sed -e "s/@SLURM_INST@/$SLURM_INST_ESC/g" |
         sed -e "s/@SLURM_USER@/$SLURM_USER/g" >"$SLURM_INST/etc/slurm.conf"
