@@ -153,7 +153,8 @@ function item_download() {
         create_dir "$build"
     fi
 
-    config=$(echo "$config " | sed -e 's/--with(out)?-[a-z]*=? //g')
+    config=$(echo "$config " | sed -e 's/--with-[a-z]*= //g')
+    config=$(echo "$config " | sed -e 's/--without-[a-z]* //g')
 
     if [ -n "$config" ]; then
         echo "\"$REPO_NAME\": the following config will be configure : \"$config\""
@@ -223,8 +224,8 @@ function deploy_source_prepare() {
  --with-pmix=$PMIX_INST --with-hwloc=$HWLOC_INST --with-munge=$MUNGE_INST"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "SLURM"
 
-    item_download "ompi" "$OMPI_PACK" "$OMPI_URL" "$OMPI_INST" "$OMPI_BRANCH" "$OMPI_COMMIT \
- --with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST --with-hwloc=$HWLOC_INST $OMPI_CONF"
+    item_download "ompi" "$OMPI_PACK" "$OMPI_URL" "$OMPI_INST" "$OMPI_BRANCH" "$OMPI_COMMIT" \
+ "--with-pmix=$PMIX_INST --with-slurm=$SLURM_INST --with-libevent=$LIBEV_INST --with-ucx=$UCX_INST --with-hwloc=$HWLOC_INST $OMPI_CONF"
     deploy_item_save_env "$REPO_NAME" "$REPO_INST" "$REPO_SRC" "OMPI"
 }
 
