@@ -156,12 +156,7 @@ function item_download() {
         echo "\"$REPO_NAME\": the following config will be configure : \"$config\""
     fi
 
-    if [ "${REPO_NAME}" = "ompi" ]; then
-        CONFIGURE_EXTRA_ARGS="${OMPI_CONFIGURE_EXTRA_ARGS}"
-    fi
-
     echo "INFO: REPO_NAME = ${REPO_NAME}"
-    echo "INFO: CONFIGURE_EXTRA_ARGS = ${CONFIGURE_EXTRA_ARGS}"
 
     # create the configure script for we can configure it later
     cat >"$build/config.sh" <<EOF
@@ -169,9 +164,9 @@ function item_download() {
 
 echo "INFO: \$PATH"
 echo "INFO: \$LD_LIBRARY_PATH"
-echo "INFO: $REPO_SRC/configure ${CONFIGURE_EXTRA_ARGS} $config"
+echo "INFO: $REPO_SRC/configure $config"
 
-$REPO_SRC/configure ${CONFIGURE_EXTRA_ARGS} $config
+$REPO_SRC/configure $config
 EOF
     chmod +x "$build/config.sh"
     cd "$sdir"
