@@ -43,7 +43,7 @@ int main()
     }
     size = val->data.uint32;
     rank = this_proc.rank;
-    PMIX_VALUE_RELEASE(val);
+//    PMIX_VALUE_RELEASE(val);
 
     {
         char name[256];
@@ -53,7 +53,11 @@ int main()
 
     // One process exits
     if (rank == 1){
-        exit(0);
+	volatile int delay = 0;
+	while(delay) {
+		sleep(1);
+	}
+        exit(1);
     }
     // Other processes are hanging
     while(1) { sleep(1); }
